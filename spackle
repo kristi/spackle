@@ -1,0 +1,414 @@
+#!/bin/bash
+#
+# Build the makepkg script from the pacman source
+# Get the makepkg script from the archlinux repo
+#
+# Since makepkg is just a bash script, we can just extract the file
+#
+VERSION="0.1alpha"
+
+prefix="$HOME/local"
+logFile="$prefix/var/log/spackle.log"
+dbDir="$prefix/var/lib/spackle/db"
+indexDir="$prefix/var/lib/spackle/index"
+packageDir="$prefix/var/cache/spackle/pkg"
+buildDir="$prefix/var/lib/spackle/build"
+#gpgDir="$prefix/etc/spackle.d/gnupg"
+arch="auto"
+
+#Don't install these packages (ignore them when required as deps)
+noInstall=(glibc pacman bash sh awk  perl gcc-libs)
+
+# PACKAGE SOURCES
+repos=(abs aur)
+
+declare -A abs
+abs[areas]="core extra community"
+abs[index]="http://mirrors.kernel.org/archlinux"
+abs[server]="rsync.archlinux.org"
+
+declare -A aur
+aur[server]="http://aur.archlinux.org/packages"
+
+if [[ "$arch" == "auto" ]]
+then
+    arch=$(uname -m)
+fi
+
+MAKEPKG="$prefix/usr/bin/makepkg --config $prefix/etc/makepkg.conf"
+# For downloading abs build files (PKGBUILD and patchfiles)
+
+update_aur_index() {
+    [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
+    # Update from file list of the aur git mirror (approx 6 sec)
+    echo "Updating ArchLinux AUR index" >&2
+    curl "http://pkgbuild.com/git/aur-mirror.git/plain" | grep '^  <li>' | sed -e 's/<[^>]*>//g' -e 's/^\s*/aur\//' > "$indexDir/aur_index.txt"
+}
+
+update_abs_index() {
+    [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
+    echo "Updating ArchLinux ABS index" >&2
+    local mirror="${abs[index]}"
+    local repo
+    for repo in core extra community
+    do
+        # Rsync lists filenames but not version numbers
+        #rsync "rsync.archlinux.org::abs/x86_64/$repo/" | awk "{print \"$repo/\"\$5}" > "${repo}_index.txt"
+
+        curl -o "$indexDir/$repo.db" "$mirror/$repo/os/$arch/$repo.db"
+        tar --exclude="*/*" -tf "$indexDir/$repo.db" | sed -e 's@/$@@' -e "s@^@$repo/@" > "$indexDir/${repo}_index.txt"
+    done
+}
+
+update_index() {
+    update_abs_index
+    update_aur_index
+}
+
+# Prints a string of the repo, package name, and version
+# Name can be specified using a Perl regular expression
+#
+# Example:
+#     find_pkg "pacman"   # core/pacman-4.0.3-1"
+#
+find_pkg() {
+    for repo in core extra community
+    do
+        [[ -e "$indexDir/${repo}_index.txt" ]] || update_abs_index
+        grep -P "/$1-[^-]*-[0-9]*$" "$indexDir/${repo}_index.txt"
+    done
+
+    [[ -e "$indexDir/aur_index.txt" ]] || update_aur_index
+    grep -P "/$1\$" "$indexDir/aur_index.txt"
+    #tar --exclude="*/*" -tf "$repo.db" | grep "^$1-[^-]*-[0-9]*/$" | sed 's@/$@@'
+    #tar --exclude="*/*" -ztf "$repo.db" | sed -n 's@^\('"$1"'-[^-]*-[0-9]*\)/$@\1@p' 
+    # Use curl to avoid saving the db file
+    #curl -sS "$db_uri" | tar --exclude="*/*" -zt | grep -m 1 "^$1-[^-]*-[0-9]*/$" | sed 's@/$@@'
+}
+
+get_aur3_info() {
+    local name="$1"
+
+    curl -Ss "http://aur3.org/rpc/$name"
+}
+
+# Prints deps (stripped of version requirements), one dep per line
+get_deps_from_aur3() {
+    get_aur3_info "$1" | sed -ne '/^ "depends":/,/^ \],/p' | sed -re '1d;$d' -e 's/^ *"//; s/[>].*//; s/",? *$//'
+}
+
+get_desc() {
+    local entry=$(find_pkg "$1")
+    local repo=$(dirname $entry)
+    local fullname=$(basename $entry)
+    local name=${fullname%-*-*}
+    if [[ "$repo" == "aur" ]]
+    then
+        curl "http://aur3.org/rpc/$name"
+    else
+        tar -Oxf "$indexDir/$repo.db" "$fullname/desc"
+    fi
+}
+
+get_deps() {
+    get_deps_from_aur3 "$1"
+}
+
+get_all_deps() {
+    # Bash array quickref
+    # create array:   a=(one two three)
+    # copy array:     b=("${a[@]}")
+    # array append:   a+=("${b[@]}")
+    # array pop:      x=$a; a=("${a[@]:1}")
+    local IFS=$'\n'  # join array elements with newline
+    declare -a check=("$1")
+    declare -a deps=()
+    declare -a ignore=("$1" ${noInstall[@]})
+    while (( ${#check[@]} > 0 ))
+    do
+        # pop pkg
+        pkg="${check[0]}"
+        check=("${check[@]:1}")
+        # remove empty string from $check
+        (( ${#check} == 0 )) && check=()
+
+        # get deps (filtered by ignore list)
+        newdeps="$(get_deps "$pkg" | grep -v -x -F "${ignore[*]}")"
+        if (( ${#newdeps} > 0 ))
+        then
+            check+=( $newdeps )
+            ignore+=( $newdeps )
+        fi
+
+        deps+=("$pkg")
+    done
+    echo "${deps[@]}"
+}
+
+
+patch_makepkg_conf() {
+    sed -i -e '/^BUILDENV/ s/fakeroot/!fakeroot/' makepkg.conf
+    sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' makepkg.conf
+    sed -i -e "s@^#PKGDEST=/home/packages@PKGDEST=$packageDir@" makepkg.conf
+    sed -i -e "/^CFLAGS/   s@\"\$@ -I$prefix/usr/include\"@" makepkg.conf
+    sed -i -e "/^CXXFLAGS/ s@\"\$@ -I$prefix/usr/include\"@" makepkg.conf
+    # Remove "-pipe" to reduce gcc memory usage
+    sed -i -e "/^CFLAGS/   s@-pipe *@@" makepkg.conf
+    sed -i -e "/^CXXFLAGS/ s@-pipe *@@" makepkg.conf
+    sed -i -e "/^LDFLAGS/  s@\"\$@ -L$prefix/usr/lib\"@" makepkg.conf
+    sed -i -e "/^LDFLAGS/  s@\"\$@ -Wl,-rpath,$prefix/usr/lib\"@" makepkg.conf
+    # append LD_RUN_PATH
+    sed -i -e "/^LDFLAGS/  a\
+        export LD_RUN_PATH=\"$prefix/usr/lib\"" makepkg.conf
+    sed -i -e "s@^#MAKEFLAGS=\"-j2\"@MAKEFLAGS=\"-j1\"@" makepkg.conf
+    #TODO prompt for packager name & email
+}
+
+patch_pacman_conf() {
+    local pacman_conf="pacman.conf"
+    [[ "$arch" == "x86_64" ]] && pacman_conf="pacman.conf.x86_64"
+    # Comment out ArchLinux repos
+    sed -i -e 's/^\[core]/#&/' "$pacman_conf"
+    sed -i -e 's/^\[extra]/#&/' "$pacman_conf"
+    sed -i -e 's/^\[community]/#&/' "$pacman_conf"
+    sed -i -e 's/^Include/#&/' "$pacman_conf"
+    # Add spackle repo for built packages
+    cat >> "$pacman_conf" << END
+[spackle]
+Server = file://$packageDir
+END
+}
+
+patch_pacman_c() {
+    sed -i -e '/if(myuid > 0 && needs_root()) {/,+3 s@^@//@' pacman.c
+}
+
+# BETA! doesn't fully work yet
+# Build makepkg from source
+bootstrap_makepkg_from_source() {
+    local entry=$(find_pkg pacman)
+    local repo=$(dirname $entry)
+    local fullname=$(basename $entry)
+    local name=${fullname%-*-*}
+    local tarball="$fullname.tar.gz"
+    wget "ftp://ftp.archlinux.org/other/pacman/$tarball"
+    tar xf "$tarball"
+    cd "$fullname"
+    # run configure to generate the makefiles
+    ./configure --sysconfdir=$prefix/etc ac_cv_lib_archive_archive_read_data=yes
+    cd scripts
+    sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' PKGBUILD
+    make makepkg
+}
+
+# Extract makefile from the pacman binary
+bootstrap_makepkg_from_repo() {
+    local mirror="${abs[server]}"
+    [[ -e "bootstrap" ]] || mkdir -p "bootstrap"
+    cd "bootstrap"
+    # get latest pacman version
+    local entry=$(find_pkg "pacman")
+    local repo=$(dirname $entry)
+    local fullname=$(basename $entry)
+    local name=${fullname%-*-*}
+
+    # Download precompiled pacman binary package
+    local pkg="$fullname-$arch.pkg.tar.xz"
+    [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
+
+    # Extract makepkg
+    tar --strip-components=1 -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
+
+    patch_makepkg_conf
+    
+    # Use tar instead of bsdtar
+    #patch -p0 bin/makepkg < ../makepkg.tar.patch
+    # tar has no "-q" option
+    sed -i -e 's/\(tar -tf "$file"\) -q .* &/\1 &/' bin/makepkg
+    sed -i -e "s/bsdtar/tar/g" bin/makepkg
+    sed -i -e "s@^confdir=.*@confdir=$prefix/etc@" bin/makepkg
+    sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
+true
+}" bin/makepkg
+
+    mkdir -p "$packageDir"
+    mkdir -p "$prefix/etc"
+    mkdir -p "$prefix/usr/bin"
+    cp "makepkg.conf" "$prefix/etc/makepkg.conf"
+    cp "bin/makepkg" "$prefix/usr/bin/makepkg"
+}
+
+install_package() {
+    local makepkg_flags="--nocheck"
+    local rsync_flags='-mrtv --no-motd --delete-after --no-p --no-o --no-g'
+    while [[ "${1:0:1}" == "-" ]]; do
+        case "$1" in
+        --build-only)  local build_only=true ;;
+        --no-download) local no_download=true ;;
+        --dep-for=*)   local dep_for="${1#*=}" ;;
+        # makepkg flags
+        -d|\
+        -dd|\
+        --nodeps|\
+        --nobuild|\
+        --nocheck|\
+        --noextract|\
+        --force|\
+        --skipchecksums|\
+        --source)
+                       makepkg_flags="$makepkg_flags $1" ;;
+        *)             echo "Skipping unrecognized option '$1'" ;;
+        esac
+        shift
+    done
+
+    [[ -e "$buildDir" ]] || mkdir -p "$buildDir"
+
+    for arg in "$@" 
+    do
+        cd "$buildDir"
+        local entry=$(find_pkg "$arg")
+        local repo=$(dirname "$entry")
+        local fullname=$(basename $entry)
+        local name=${fullname%-*-*}
+
+        echo ""
+        if [[ "$no_download" != true ]]
+        then
+            echo "Downloading $entry"
+            rm -rf "$name"
+
+            case "$repo" in
+            core|extra|community)
+                # TODO proper arch detection for "any"
+                rsync -q $rsync_flags "${abs[server]}::abs/$arch/$repo/$name" . ||
+                    rsync -q $rsync_flags "${abs[server]}::abs/any/$repo/$name" . 
+                ;;
+            aur)
+                curl "http://aur.archlinux.org/packages/${name:0:2}/$name/$name.tar.gz" | tar -zx
+                ;;
+            *) echo "Unrecognized repo: '$repo'"
+            esac
+
+            cd "$name"
+            # only modify PKGBUILD if we downloaded it
+            sed -i -e "s@/usr@$prefix/usr@g" PKGBUILD
+            sed -i -e "s@/etc@$prefix/etc@g" PKGBUILD
+            sed -i -e "s@/var@$prefix/var@g" PKGBUILD
+
+            if [[ "$name" == "pacman" ]]
+            then
+                patch_pacman_conf
+                patch_makepkg_conf
+                $MAKEPKG --nobuild --skipchecksums
+                (cd src/${fullname%-*}/src/pacman; patch_pacman_c)
+                makepkg_flags="$makepkg_flags --nodeps --skipchecksums --noextract"
+            fi
+        fi
+
+        cd "$buildDir/$name"
+        echo "Building $entry"
+        # restrict memory to prevent Dreamhost from killing the process
+        #ulimit -v 499000  
+        $MAKEPKG $makepkg_flags
+
+        [[ "$build_only" == "true" ]] && continue
+        [[ -e "$dbDir" ]] || mkdir -p "$dbDir"
+
+        for package_file in $(find . "$packageDir" -name "$name*.pkg.tar.xz")
+        do
+            echo "Installing $(basename $package_file)"
+            tar -C "$prefix" --strip-components=3 --show-transformed-names --index-file="$name.files" -xf "$package_file"
+            mv "$name.files" "$dbDir"
+            [[ ! -z "$dep_for" ]] && echo "$dep_for" >> "$dbDir/$name.dep-for"
+        done
+    done
+}
+
+get_name_ver_rel() {
+    grep -E "^pkgname=|^pkgver=|^pkgrel=" PKGBUILD | awk -F= '{a[$1]=$2}END{OFS="-"; print a["pkgname"],a["pkgver"],a["pkgrel"]}'
+}
+
+build_package() {
+    install_package --build-only "$@"
+}
+
+bootstrap_pak() {
+
+    bootstrap_makepkg_from_repo
+    #install_package zlib bzip2 xz openssl
+    #install_package libarchive pacman
+}
+
+clean() {
+    rm -rf "$prefix" "bootstrap"
+}
+
+usage() {
+    local script=$(basename "$0")
+    echo ""
+    echo "$script Commands:"
+    echo ""
+    echo "    -h          displays help"
+    echo "    --help      displays help"
+    echo "    --version   displays version"
+    echo "    aur3        print package info from aur3.org"
+    echo "    bootstrap   installs bootstrap scripts (including makepkg)"
+    echo "    build       download and build a package"
+    echo "    clean       removes installation files"
+    echo "    find        find package_name in search index (Perl regex supported)"
+    echo "    info        print package info"
+    echo "    install     download, build, and install a package"
+    echo "    install --no-download   build and install"
+    echo "    install --force         pass '-f' to makepkg"
+    echo "    search      find package_name in search index (Perl regex supported)"
+    echo "    show        print package info"
+    echo "    update      updates the package indices"
+    echo ""
+    echo ""
+    echo "Examples:"
+    echo ""
+    echo "$script bootstrap"
+    echo "    install bootstrap pak system"
+    echo "$script update"
+    echo "    update the package indices"
+    echo "$script search pacman"
+    echo "    find package with exact name 'pacman'"
+    echo "    (repos core, extra, community, and aur are searched)"
+    echo "$script search \"pac.*\""
+    echo "    find packages that start with 'pac'"
+    echo "    (protect regex from bash file expansion by using quotes)"
+    echo "$script install zlib"
+    echo "    installs zlib into the bootstrap system"
+    echo "    (note dependencies are NOT auto-installed)"
+    echo "$script install --force zlib"
+    echo "    force makepkg to rebuild zlib package"
+    echo "$script install --no-download zlib"
+    echo "    builds and installs zlib"
+    echo "    (assumes zlib has already been downloaded)"
+    echo ""
+    echo "$script $VERSION"
+    echo ""
+}
+
+print_version() {
+    local script=$(basename "$0")
+    echo "$script $VERSION"
+}
+
+case "$1" in
+    -h|help|--help)     usage ;;
+    --version|version)  print_version ;;
+    bootstrap)          bootstrap_pak ;;
+    clean)              clean ;;
+    find|search)        shift; find_pkg "$1" ;;
+    update)             update_index ;;
+    build)              shift; build_package "$@" ;;
+    install)            shift; install_package "$@" ;;
+    info|show)          shift; get_desc "$1" ;;
+    deps)               shift; get_deps "$1" ;;
+    alldeps)            shift; get_all_deps "$1" ;;
+    aur3)               shift; get_aur3_info "$1" ;;
+    *)                  echo "Unrecognized command: '$1'"
+esac
+
