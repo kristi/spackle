@@ -1,0 +1,117 @@
+# This file must be used with "source activate_spackle" *from bash*
+# you cannot run it directly
+#
+# This sets up environment variables for a spackle build environment
+
+deactivate_spackle () {
+    # reset old environment variables
+    if [ -n "$_OLD_SPACKLE_PATH" ] ; then
+        PATH="$_OLD_SPACKLE_PATH"
+        export PATH
+        unset _OLD_SPACKLE_PATH
+    fi
+    if [ -n "$_OLD_SPACKLE_MANPATH" ] ; then
+        MANPATH="$_OLD_SPACKLE_MANPATH"
+        export MANPATH
+        unset _OLD_SPACKLE_MANPATH
+    fi
+    if [ -n "$_OLD_SPACKLE_CFLAGS" ] ; then
+        CFLAGS="$_OLD_SPACKLE_CFLAGS"
+        export CFLAGS
+        unset _OLD_SPACKLE_CFLAGS
+    fi
+    if [ -n "$_OLD_SPACKLE_CXXFLAGS" ] ; then
+        CXXFLAGS="$_OLD_SPACKLE_CXXFLAGS"
+        export CXXFLAGS
+        unset _OLD_SPACKLE_CXXFLAGS
+    fi
+    if [ -n "$_OLD_SPACKLE_LDFLAGS" ] ; then
+        LDFLAGS="$_OLD_SPACKLE_LDFLAGS"
+        export LDFLAGS
+        unset _OLD_SPACKLE_LDFLAGS
+    fi
+    if [ -n "$_OLD_SPACKLE_LD_RUN_PATH" ] ; then
+        LD_RUN_PATH="$_OLD_SPACKLE_LD_RUN_PATH"
+        export LD_RUN_PATH
+        unset _OLD_SPACKLE_LD_RUN_PATH
+    fi
+    if [ -n "$_OLD_SPACKLE_MAKEFLAGS" ] ; then
+        MAKEFLAGS="$_OLD_SPACKLE_MAKEFLAGS"
+        export MAKEFLAGS
+        unset _OLD_SPACKLE_MAKEFLAGS
+    fi
+
+    # This should detect bash and zsh, which have a hash command that must
+    # be called to get it to forget past commands.  Without forgetting
+    # past commands the $PATH changes we made may not be respected
+    if [ -n "$BASH" -o -n "$ZSH_VERSION" ] ; then
+        hash -r
+    fi
+
+    if [ -n "$_OLD_SPACKLE_PS1" ] ; then
+        PS1="$_OLD_SPACKLE_PS1"
+        export PS1
+        unset _OLD_SPACKLE_PS1
+    fi
+
+    unset SPACKLE_ENV
+    if [ ! "$1" = "nondestructive" ] ; then
+    # Self destruct!
+        unset -f deactivate_spackle
+    fi
+}
+
+# unset irrelavent variables
+deactivate_spackle nondestructive
+
+SPACKLE_ENV="$HOME/local"
+export SPACKLE_ENV
+
+_OLD_SPACKLE_PATH="$PATH"
+PATH="$SPACKLE_ENV/usr/bin:$SPACKLE_ENV/usr/sbin:$PATH"
+export PATH
+
+_OLD_SPACKLE_MANPATH="$MANPATH"
+MANPATH="$SPACKLE_ENV/usr/share/man:$MANPATH"
+export MANPATH
+
+_OLD_SPACKLE_CFLAGS="$CFLAGS"
+CFLAGS="-I$SPACKLE_ENV/usr/include $CFLAGS"
+export CFLAGS
+
+_OLD_SPACKLE_CXXFLAGS="$CXXFLAGS"
+CXXFLAGS="-I$SPACKLE_ENV/usr/include $CXXFLAGS"
+export CXXFLAGS
+
+_OLD_SPACKLE_LDFLAGS="$LDFLAGS"
+LDFLAGS="-L$SPACKLE_ENV/usr/lib -Wl,-rpath,$SPACKLE_ENV/usr/lib $LDFLAGS"
+export LDFLAGS
+
+_OLD_SPACKLE_LD_RUN_PATH="$LD_RUN_PATH"
+LD_RUN_PATH="$SPACKLE_ENV/usr/lib:$LD_RUN_PATH"
+export LD_RUN_PATH
+
+_OLD_SPACKLE_MAKEFLAGS="$MAKEFLAGS"
+MAKEFLAGS="-j1 $MAKEFLAGS"
+export MAKEFLAGS
+
+if [ -z "$SPACKLE_ENV_DISABLE_PROMPT" ] ; then
+    _OLD_SPACKLE_PS1="$PS1"
+    if [ "`basename \"$SPACKLE_ENV\"`" = "__" ] ; then
+        # special case for Aspen magic directories
+        # see http://www.zetadev.com/software/aspen/
+        PS1="[spackle] $PS1"
+    else
+        #PS1="(`basename \"$SPACKLE_ENV\"`)$PS1"
+        # Add env name before first non-whitespace PS1 char
+        PS1=$(echo "$PS1" | sed -e '0,/\S/s//[spackle] &/')
+    fi
+    export PS1
+fi
+
+# This should detect bash and zsh, which have a hash command that must
+# be called to get it to forget past commands.  Without forgetting
+# past commands the $PATH changes we made may not be respected
+if [ -n "$BASH" -o -n "$ZSH_VERSION" ] ; then
+    hash -r
+fi
