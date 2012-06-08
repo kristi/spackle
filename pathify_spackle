@@ -1,5 +1,11 @@
-# This file must be used with "source activate_spackle" *from bash*
-# you cannot run it directly
+# This sets up a pathify environment.  Put this file at
+#     ~/.pathify/spackle
+# then run
+#     pathify spackle
+# to activate this environment.
+#
+# This file must be loaded from pathify.  (Or you can source it directly)
+# You cannot run it.
 #
 # This sets up environment variables for a spackle build environment
 
@@ -69,6 +75,7 @@ export SPACKLE_ENV
 
 _OLD_SPACKLE_PATH="$PATH"
 PATH="$SPACKLE_ENV/usr/bin:$SPACKLE_ENV/usr/sbin:$PATH"
+PATH="$HOME/github/spackle:$PATH"  # add spackle to path for development
 export PATH
 
 _OLD_SPACKLE_MANPATH="$MANPATH"
@@ -95,7 +102,8 @@ _OLD_SPACKLE_MAKEFLAGS="$MAKEFLAGS"
 MAKEFLAGS="-j1 $MAKEFLAGS"
 export MAKEFLAGS
 
-if [ -z "$SPACKLE_ENV_DISABLE_PROMPT" ] ; then
+if [ -z "$SPACKLE_ENV_DISABLE_PROMPT" ] ||
+   [ -z "$PATHIFY_DISABLE_PROMPT" ] ; then
     _OLD_SPACKLE_PS1="$PS1"
     if [ "`basename \"$SPACKLE_ENV\"`" = "__" ] ; then
         # special case for Aspen magic directories
