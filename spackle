@@ -253,6 +253,7 @@ install_package() {
         --nobuild|\
         --nocheck|\
         --noextract|\
+        -f|\
         --force|\
         --skipchecksums|\
         --source)
