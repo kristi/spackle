@@ -102,7 +102,7 @@ _OLD_SPACKLE_MAKEFLAGS="$MAKEFLAGS"
 MAKEFLAGS="-j1 $MAKEFLAGS"
 export MAKEFLAGS
 
-if [ -z "$SPACKLE_ENV_DISABLE_PROMPT" ] ||
+if [ -z "$SPACKLE_ENV_DISABLE_PROMPT" ] &&
    [ -z "$PATHIFY_DISABLE_PROMPT" ] ; then
     _OLD_SPACKLE_PS1="$PS1"
     if [ "`basename \"$SPACKLE_ENV\"`" = "__" ] ; then
