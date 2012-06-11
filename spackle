@@ -224,7 +224,7 @@ bootstrap_makepkg_from_repo() {
     # Use tar instead of bsdtar
     #patch -p0 bin/makepkg < ../makepkg.tar.patch
     # tar has no "-q" option
-    sed -i -e 's/\(tar -tf "$file"\) -q .* &/\1 &/' bin/makepkg
+    sed -i -e 's/\(tar -tf "$file"\) -q/\1/' bin/makepkg
     sed -i -e "s/bsdtar/tar/g" bin/makepkg
     sed -i -e "s@^confdir=.*@confdir=$prefix/etc@" bin/makepkg
     sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
@@ -334,7 +334,7 @@ build_package() {
     install_package --build-only "$@"
 }
 
-bootstrap_pak() {
+bootstrap_spackle() {
 
     bootstrap_makepkg_from_repo
     #install_package zlib bzip2 xz openssl
@@ -370,7 +370,7 @@ usage() {
     echo "Examples:"
     echo ""
     echo "$script bootstrap"
-    echo "    install bootstrap pak system"
+    echo "    install bootstrap spackle system"
     echo "$script update"
     echo "    update the package indices"
     echo "$script search pacman"
@@ -400,7 +400,7 @@ print_version() {
 case "$1" in
     -h|help|--help)     usage ;;
     --version|version)  print_version ;;
-    bootstrap)          bootstrap_pak ;;
+    bootstrap)          bootstrap_spackle ;;
     clean)              clean ;;
     find|search)        shift; find_pkg "$1" ;;
     update)             update_index ;;
