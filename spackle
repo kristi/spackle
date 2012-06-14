@@ -460,6 +460,36 @@ uninstall_package() {
     hash -r
 }
 
+# Convert desc file format to be easily greppable
+# Usage:
+# cat desc | preparse_desc | grep "^PKGNAME="
+# 
+# Input:
+# %PKGNAME%
+# foobar
+#
+# %PKGVER%
+# 1.2.3-4
+#
+# Output:
+# PKGNAME=foobar
+# PKGVER=1.2.3-4
+preparse_desc() {
+    sed -n -e '/^%/{s/%//g; h; d}' \
+       -e '/^$/!H' \
+       -e '/^$/{x; s/\n/=/; s/\n/\t/g; p}'
+}
+
+get_installed() {
+    local dir package
+    for dir in $(ls -1 "$dbDir")
+    do
+        cat "$dbDir/$dir/desc" | grep -x -A 1 -E "^%PKGNAME%|^%PKGVER%" |
+            grep -v -E "^%|^--$" | tr $'\n' " "
+        echo ""
+    done
+}
+
 get_name_ver_rel() {
     grep -E "^pkgname=|^pkgver=|^pkgrel=" PKGBUILD | awk -F= '{a[$1]=$2}END{OFS="-"; print a["pkgname"],a["pkgver"],a["pkgrel"]}'
 }
@@ -496,6 +526,7 @@ usage() {
     echo "    install     download, build, and install a package"
     echo "    install --no-download   build and install"
     echo "    install --force         pass '-f' to makepkg"
+    echo "    list        list installed packages"
     echo "    search      find package_name in search index (Perl regex supported)"
     echo "    show        print package info"
     echo "    uninstall   remove an installed package"
@@ -542,6 +573,7 @@ case "$1" in
     build)              shift; build_package "$@" ;;
     install)            shift; install_package "$@" ;;
     uninstall)          shift; uninstall_package "$@" ;;
+    list)               get_installed ;;
     info|show)          shift; get_desc "$1" ;;
     deps)               shift; get_deps "$1" ;;
     alldeps)            shift; get_all_deps "$1" ;;
