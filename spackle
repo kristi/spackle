@@ -156,11 +156,12 @@ END
     fi
 }
 
-# TODO: add version checking for dependencies. Use `vercmp` from pacman
 strip_version() {
     sed -e 's/[<=>].*$//'
 }
 
+# TODO: add version checking for dependencies. Use `vercmp` from pacman
+# TODO: check for circular dependencies?
 get_all_deps() {
     # Bash array quickref
     # create array:   a=(one two three)
@@ -385,14 +386,15 @@ install_package() {
         for package_file in $(find "$packageDir" -name "$fullname*.pkg.tar.xz")
         do
             echo "Installing $(basename $package_file)" >&2
-            tar -C "$prefix" --strip-components=3 --show-transformed-names --index-file="$name.files" -xvf "$package_file"
             mkdir -p "$dbDir/$name"
-            mv "$name.files" "$dbDir/$name/files"
+            cd "$dbDir/$name"
+            tar -C "$prefix" --strip-components=3 --show-transformed-names --index-file="files" -xvf "$package_file"
             tar -Oxf "$package_file" ".PKGINFO" | parse_pkginfo > "$dbDir/$name/desc"
             [[ -n "$dep_for" ]] && echo "$dep_for" >> "$dbDir/$name/dep-for"
         done
     done
 
+    # Re-index
     hash -r
 }
 
