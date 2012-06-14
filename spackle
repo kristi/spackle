@@ -142,14 +142,22 @@ get_deps() {
     local name=${fullname%-*-*}
     if [[ "$repo" == "aur" ]]
     then
+        # Try to protect against malicious PKGBUILDs by executing them
+        # in an empty directory with a restricted bash shell and empty
+        # environment. This isn't perfect, but its better than nothing.
+        mkdir -p "$tmpDir/empty"
+        cd "$tmpDir/empty"
         (
             #tar -Oxf "$indexDir/all_pkgbuilds.tar" "mirror/$name/PKGBUILD"
             curl -sS https://aur.archlinux.org/packages/${name:0:2}/$name/PKGBUILD
-            cat <<END
-            IFS=\$'\n'
-            (( \${#depends[*]} > 0 )) && echo "\${depends[*]}"
-END
-        ) | rbash --norc --noprofile
+            function print_deps() {
+                IFS=$'\n'
+                (( ${#depends[*]} > 0 )) && echo "${depends[*]}"
+            }
+            declare -f print_deps
+            echo print_deps
+        #FIXME: set a real path for the rbashrc file
+        ) | env - "BASH_ENV=$(dirname $0)/rbashrc" rbash --noprofile --norc
     else
         tar -Oxf "$indexDir/$repo.db" "$fullname/depends" | \
             sed -ne '/^%DEPENDS%/,/^$/{ //d;  p }' 
@@ -534,6 +542,7 @@ usage() {
     echo "    install --no-download   build and install"
     echo "    install --force         pass '-f' to makepkg"
     echo "    list        list installed packages"
+    echo "    pkgbuild    print PKGBUILD for a package"
     echo "    search      find package_name in search index (Perl regex supported)"
     echo "    show        print package info"
     echo "    uninstall   remove an installed package"
