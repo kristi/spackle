@@ -124,7 +124,7 @@ get_desc() {
     fi
 }
 
-get_pkgbuild() {
+get_aur3_pkgbuild() {
     # print PKGBUILD to stdout
     local entry=$(find_single_pkg "$1")
     local repo=$(dirname $entry)
@@ -594,7 +594,7 @@ case "$1" in
     deps)               shift; get_deps "$1" ;;
     alldeps)            shift; get_all_deps --ignore-installed "$1" ;;
     desc)               shift; get_desc "$1" ;;
-    pkgbuild)           shift; get_pkgbuild "$1" ;;
+    pkgbuild)           shift; get_aur3_pkgbuild "$1" ;;
     aur3)               shift; get_aur3_info "$1" ;;
     *)                  echo "Unrecognized command: '$1'" >&2
 esac
