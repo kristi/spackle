@@ -167,27 +167,32 @@ get_all_deps() {
     # copy array:     b=("${a[@]}")
     # array append:   a+=("${b[@]}")
     # array pop:      x=$a; a=("${a[@]:1}")
-    local IFS=$'\n'  # join array elements with newline
-    declare -a check=("$1")
+    declare -a ignore=( ${noInstall[@]} )
+    case "$1" in 
+        --ignore-installed) shift; ignore+=( $(ls -1 "$dbDir") ) ;;
+    esac
+    local pkg="$1"
+    declare -a check=( "$pkg" )
     declare -a deps=()
-    declare -a ignore=("$1" ${noInstall[@]})
+    ignore+=( "$pkg" )
+    local IFS=$'\n'  # join array elements with newline
     while (( ${#check[@]} > 0 ))
     do
         # pop pkg
-        pkg="${check[0]}"
-        check=("${check[@]:1}")
+        local name="${check[0]}"
+        check=( "${check[@]:1}" )
         # remove empty string from $check
         (( ${#check[0]} == 0 )) && check=()
 
         # get deps (filtered by ignore list)
-        newdeps="$(get_deps "$pkg" | strip_version | grep -v -x -F "${ignore[*]}")"
+        newdeps="$(get_deps "$name" | strip_version | grep -v -x -F "${ignore[*]}")"
         if (( ${#newdeps} > 0 ))
         then
             check+=( $newdeps )
             ignore+=( $newdeps )
         fi
 
-        deps+=("$pkg")
+        [[ "$pkg" != "$name" ]] && deps+=( "$name" )
     done
     echo "${deps[@]}"
 }
@@ -576,7 +581,7 @@ case "$1" in
     list)               get_installed ;;
     info|show)          shift; get_desc "$1" ;;
     deps)               shift; get_deps "$1" ;;
-    alldeps)            shift; get_all_deps "$1" ;;
+    alldeps)            shift; get_all_deps --ignore-installed "$1" ;;
     desc)               shift; get_desc "$1" ;;
     pkgbuild)           shift; get_pkgbuild "$1" ;;
     aur3)               shift; get_aur3_info "$1" ;;
