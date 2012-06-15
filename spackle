@@ -6,12 +6,13 @@
 # Since makepkg is just a bash script, we can just extract the file
 #
 VERSION="0.1alpha"
+INSTALL_INFO="@INSTALL_INFO@"
 
 prefix="$HOME/local"
 logFile="$prefix/var/log/spackle.log"
 dbDir="$prefix/var/lib/spackle/db"
 indexDir="$prefix/var/lib/spackle/index"
-packageDir="$prefix/var/cache/spackle/pkg"
+packageDir="$prefix/var/lib/spackle/pkg"
 buildDir="$prefix/var/lib/spackle/build"
 #gpgDir="$prefix/etc/spackle.d/gnupg"
 tmpDir="$prefix/tmp"
@@ -198,7 +199,7 @@ get_deps() {
             declare -f print_deps
             echo print_deps
         #FIXME: set a real path for the rbashrc file
-        ) | env - "BASH_ENV=$(dirname $0)/rbashrc" rbash --noprofile --norc
+        ) | env - "BASH_ENV=$prefix/etc/spackle/rbashrc" rbash --noprofile --norc
     else
         tar -Oxf "$indexDir/$repo.db" "$fullname/depends" | \
             sed -ne '/^%DEPENDS%/,/^$/{ //d;  p }' 
@@ -247,6 +248,15 @@ get_all_deps() {
     echo "${deps[@]}"
 }
 
+patch_makepkg() {
+    # Use tar instead of bsdtar since we may not have bsdtar/libarchive
+    sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
+    sed -i -e "s/bsdtar/tar/g" makepkg
+    sed -i -e "s|^confdir=.*|confdir=$prefix/etc|" makepkg
+    sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
+true
+}" makepkg
+}
 
 patch_makepkg_conf() {
     sed -i -e '/^BUILDENV/ s/fakeroot/!fakeroot/' makepkg.conf
@@ -306,35 +316,25 @@ bootstrap_makepkg_from_source() {
 # Extract makefile from the pacman binary
 bootstrap_makepkg_from_repo() {
     local mirror="${abs[index]}"
-    [[ -e "bootstrap" ]] || mkdir -p "bootstrap"
-    cd "bootstrap"
     # get latest pacman version
     local entry=$(find_single_pkg "pacman")
     local repo=$(dirname $entry)
     local fullname=$(basename $entry)
     local name=${fullname%-*-*}
 
+    [[ -e "$prefix/tmp" ]] || mkdir -p "$prefix/tmp"
+    pushd "$prefix/tmp"
+
     # Download precompiled pacman binary package
     local pkg="$fullname-$arch.pkg.tar.xz"
-    [[ -e "$packageDir" ]] || mkdir -p "$packageDir"
-    cd "$packageDir"
     [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
 
     # Extract makepkg
-    [[ -e "$prefix" ]] || mkdir -p "$prefix"
     tar -C "$prefix" -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
 
     cd "$prefix/etc" && patch_makepkg_conf
-    
-    cd "$prefix/usr/bin"
-    # Use tar instead of bsdtar since we may not have bsdtar/libarchive
-    sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
-    sed -i -e "s/bsdtar/tar/g" makepkg
-    sed -i -e "s|^confdir=.*|confdir=$prefix/etc|" makepkg
-    sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
-true
-}" makepkg
-
+    cd "$prefix/usr/bin" && patch_makepkg
+    popd
 }
 
 download_source() {
@@ -408,7 +408,10 @@ install_package() {
         local name=${fullname%-*-*}
 
         echo "" >&2
-        if [[ -e "$packageDir/$fullname-$arch.pkg.tar.xz" ]]
+        if [[ -e "$arg" ]]
+        then
+            :
+        elif [[ -e "$packageDir/$fullname-$arch.pkg.tar.xz" ]]
         then
             echo "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'" >&2
         else
@@ -434,6 +437,7 @@ install_package() {
             echo "Installing $(basename $package_file)" >&2
             mkdir -p "$dbDir/$name"
             cd "$dbDir/$name"
+            #TODO: if $prefix changes, strip-components needs to change
             tar -C "$prefix" --strip-components=3 --show-transformed-names --index-file="files" -xvf "$package_file"
             tar -Oxf "$package_file" ".PKGINFO" | parse_pkginfo > "$dbDir/$name/desc"
             [[ -n "$dep_for" ]] && echo "$dep_for" >> "$dbDir/$name/dep-for"
@@ -589,11 +593,19 @@ build_package() {
 }
 
 bootstrap_spackle() {
+    local currentDir="$PWD"
+    local scriptDir=$(cd ${0%/*} && pwd)
+
     [[ -e "$indexDir/core_index.txt" ]] || update_index
     bootstrap_makepkg_from_repo
     install_package jansson jshon
     #install_package zlib bzip2 xz openssl
     #install_package libarchive pacman
+
+    mkdir -p "$prefix/usr/bin"
+    cp "$scriptDir/spackle" "$prefix/usr/bin"
+    mkdir -p "$prefix/etc/spackle"
+    cp "$scriptDir/rbashrc" "$prefix/etc/spackle"
 }
 
 clean() {
