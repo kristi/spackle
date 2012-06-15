@@ -103,7 +103,7 @@ find_single_pkg() {
 get_aur3_info() {
     local name="$1"
 
-    curl -Ss "http://aur3.org/rpc/$name"
+    curl -Ss "http://aur3.org/rpc/$(echo $name|./urlencode)"
 }
 
 # Prints deps (stripped of version requirements), one dep per line
@@ -124,6 +124,24 @@ get_desc() {
     fi
 }
 
+get_pkgbuild() {
+    # print PKGBUILD to stdout
+    local entry=$(find_single_pkg "$1")
+    local repo=$(dirname $entry)
+    local fullname=$(basename $entry)
+    local name=${fullname%-*-*}
+
+    if [[ "$repo" == "aur" ]]
+    then
+        curl -sS https://aur.archlinux.org/packages/${name:0:2}/$name/PKGBUILD
+    else
+        mkdir -p "$tmpDir/$name"
+        rsync "rsync.archlinux.org::abs/$arch/$repo/$name/PKGBUILD" "$tmpDir/$name/PKGBUILD" 
+        cat "$tmpDir/$name/PKGBUILD"
+        rm -rf "$tmpDir/$name"
+    fi
+}
+
 get_aur3_pkgbuild() {
     # print PKGBUILD to stdout
     local entry=$(find_single_pkg "$1")
@@ -131,6 +149,29 @@ get_aur3_pkgbuild() {
     local fullname=$(basename $entry)
     local name=${fullname%-*-*}
     tar -Oxf "$indexDir/all_pkgbuilds.tar" "mirror/$name/PKGBUILD"
+}
+
+get_local_version() {
+    local name="$1"
+    [[ ! -e "$dbDir/$name/desc" ]] && echo "package '$name' not installed" >&2 && return 1
+    sed -ne '/%PKGVER%/,/^$/{//d;p}' "$dbDir/$name/desc"
+}
+
+get_server_version() {
+    # print depends list, one per line
+    local entry="$1"
+    [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
+    [[ "${#entry}" == 0 ]] && echo "spackle: Error: package '$1' not found" >&2 && return 1
+    local repo=${entry%/*}
+    local fullname=${entry#*/}
+    local name=${fullname%-*-*}
+    if [[ "$repo" == "aur" ]]
+    then
+        curl -sS --get -d "type=info" --data-urlencode "arg=$name" "http://aur.archlinux.org/rpc.php" | jshon -e results -e Version -u
+    else
+        tar -Oxf "$indexDir/$repo.db" "$fullname/desc" | \
+            sed -ne '/^%VERSION%/,/^$/{ //d;  p }' 
+    fi
 }
 
 get_deps() {
@@ -406,6 +447,44 @@ install_package() {
     hash -r
 }
 
+upgrade_package() {
+    local name choice
+    local upgradable=()
+    for name in "$@" $([[ "$#" = 0 ]] && ls -1 "$dbDir")
+    do
+        local local_ver=$(get_local_version "$name")
+        [[ -z "$local_ver" ]] && continue
+        local remote_ver=$(get_server_version "$name")
+        if [[ -z "$remote_ver" ]]
+        then
+            echo "no remote version found" >&2
+            continue
+        elif [[ "$local_ver" = "$remote_ver" ]]
+        then
+            #echo "$name $local_ver (up to date)"
+            continue
+        fi
+        echo "$name $local_ver (upgrade to $remote_ver)"
+        upgradable+=($name)
+    done
+    if (( "${#upgradable[@]}" == 0 ))
+    then
+        echo "System up to date"
+        return 0
+    fi
+    read -p "Upgrade ${#upgradable[@]} package${upgradable[1]:+s}? [y,n] " choice 
+    case ${choice:0:1} in  
+        y|Y) echo "";;
+        *) return 1;;
+    esac
+    for name in "${upgradable[@]}"
+    do
+        echo "Upgrade '$name'"
+        uninstall_package $name
+        install_package $name
+    done
+}
+
 # Converts the .PKGINFO in a *.pkg.tar.xz into a desc file
 # Usage
 # cat .PKGINFO | parse_pkginfo > desc
@@ -465,7 +544,6 @@ uninstall_package() {
     # Delete empty directories
     for dir in $dir_list
     do
-        echo "$dir"
         rmdir "$prefix/$dir" 2>/dev/null && echo "deleted '$prefix/$dir'" >&2
     done
 
@@ -516,6 +594,7 @@ build_package() {
 bootstrap_spackle() {
 
     bootstrap_makepkg_from_repo
+    install_package jansson jshon
     #install_package zlib bzip2 xz openssl
     #install_package libarchive pacman
 }
@@ -594,8 +673,9 @@ case "$1" in
     deps)               shift; get_deps "$1" ;;
     alldeps)            shift; get_all_deps --ignore-installed "$1" ;;
     desc)               shift; get_desc "$1" ;;
-    pkgbuild)           shift; get_aur3_pkgbuild "$1" ;;
+    pkgbuild)           shift; get_pkgbuild "$1" ;;
     aur3)               shift; get_aur3_info "$1" ;;
+    upgrade)            shift; upgrade_package "$@" ;;
     *)                  echo "Unrecognized command: '$1'" >&2
 esac
 
