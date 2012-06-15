@@ -40,7 +40,7 @@ deactivate_spackle () {
         unset _OLD_SPACKLE_PS1
     fi
 
-    unset SPACKLE_ENV
+    unset SPACKLE_PREFIX
     if [ ! "$1" = "nondestructive" ] ; then
     # Self destruct!
         unset -f deactivate_spackle
@@ -50,30 +50,33 @@ deactivate_spackle () {
 # unset irrelavent variables
 deactivate_spackle nondestructive
 
-SPACKLE_ENV="$HOME/local"
+SPACKLE_ENV="spackle"
 export SPACKLE_ENV
 
+SPACKLE_PREFIX="$HOME/local"
+export SPACKLE_PREFIX
+
 _OLD_SPACKLE_PATH="$PATH"
-PATH="$SPACKLE_ENV/bin:$SPACKLE_ENV/usr/bin:$SPACKLE_ENV/usr/sbin:$PATH"
+PATH="$SPACKLE_PREFIX/bin:$SPACKLE_PREFIX/usr/bin:$SPACKLE_PREFIX/usr/sbin:$PATH"
 export PATH
 
 _OLD_SPACKLE_MANPATH="$MANPATH"
-MANPATH="$SPACKLE_ENV/usr/share/man:$MANPATH"
+MANPATH="$SPACKLE_PREFIX/usr/share/man:$MANPATH"
 export MANPATH
 
 _OLD_SPACKLE_INFOPATH="$INFOPATH"
-INFOPATH="$SPACKLE_ENV/usr/share/info:$INFOPATH"
+INFOPATH="$SPACKLE_PREFIX/usr/share/info:$INFOPATH"
 export INFOPATH
 
-if [ -z "$SPACKLE_ENV_DISABLE_PROMPT" ] &&
+if [ -z "$SPACKLE_PREFIX_DISABLE_PROMPT" ] &&
    [ -z "$PATHIFY_DISABLE_PROMPT" ] ; then
     _OLD_SPACKLE_PS1="$PS1"
-    if [ "`basename \"$SPACKLE_ENV\"`" = "__" ] ; then
+    if [ "`basename \"$SPACKLE_PREFIX\"`" = "__" ] ; then
         # special case for Aspen magic directories
         # see http://www.zetadev.com/software/aspen/
         PS1="[spackle] $PS1"
     else
-        #PS1="(`basename \"$SPACKLE_ENV\"`)$PS1"
+        #PS1="(`basename \"$SPACKLE_PREFIX\"`)$PS1"
         # Add env name before first non-whitespace PS1 char
         PS1=$(echo "$PS1" | sed -e '0,/\S/s//[spackle] &/')
     fi
