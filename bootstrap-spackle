@@ -1,0 +1,141 @@
+#!/bin/bash
+#
+# Installs spackle
+#
+
+patch_makepkg() {
+    # Use tar instead of bsdtar since we may not have bsdtar/libarchive
+    sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
+    sed -i -e "s/bsdtar/tar/g" makepkg
+    sed -i -e "s|^confdir=.*|confdir=$prefix/etc|" makepkg
+    sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
+true
+}" makepkg
+}
+
+patch_makepkg_conf() {
+    sed -i -e '/^BUILDENV/ s/fakeroot/!fakeroot/' makepkg.conf
+    sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' makepkg.conf
+    sed -i -e "s@^#PKGDEST=/home/packages@PKGDEST=$packageDir@" makepkg.conf
+    sed -i -e "/^CFLAGS/   s@\"\$@ -I$prefix/usr/include\"@" makepkg.conf
+    sed -i -e "/^CXXFLAGS/ s@\"\$@ -I$prefix/usr/include\"@" makepkg.conf
+    # Remove "-pipe" to reduce gcc memory usage
+    sed -i -e "/^CFLAGS/   s@-pipe *@@" makepkg.conf
+    sed -i -e "/^CXXFLAGS/ s@-pipe *@@" makepkg.conf
+    sed -i -e "/^LDFLAGS/  s@\"\$@ -L$prefix/usr/lib\"@" makepkg.conf
+    sed -i -e "/^LDFLAGS/  s@\"\$@ -Wl,-rpath,$prefix/usr/lib\"@" makepkg.conf
+    # append LD_RUN_PATH
+    sed -i -e "/^LDFLAGS/  a\
+        export LD_RUN_PATH=\"$prefix/usr/lib\"" makepkg.conf
+    sed -i -e "s@^#MAKEFLAGS=\"-j2\"@MAKEFLAGS=\"-j1\"@" makepkg.conf
+    #TODO prompt for packager name & email
+}
+
+patch_pacman_conf() {
+    local pacman_conf="pacman.conf"
+    [[ "$arch" == "x86_64" ]] && pacman_conf="pacman.conf.x86_64"
+    # Comment out ArchLinux repos
+    sed -i -e 's/^\[core]/#&/' "$pacman_conf"
+    sed -i -e 's/^\[extra]/#&/' "$pacman_conf"
+    sed -i -e 's/^\[community]/#&/' "$pacman_conf"
+    sed -i -e 's/^Include/#&/' "$pacman_conf"
+    # Add spackle repo for built packages
+    cat >> "$pacman_conf" << END
+[spackle]
+Server = file://$packageDir
+END
+}
+
+patch_pacman_c() {
+    sed -i -e '/if(myuid > 0 && needs_root()) {/,+3 s@^@//@' pacman.c
+}
+
+# BETA! doesn't fully work yet
+# Build makepkg from source
+bootstrap_makepkg_from_source() {
+    local entry=$(find_single_pkg pacman)
+    local repo=$(dirname $entry)
+    local fullname=$(basename $entry)
+    local name=${fullname%-*-*}
+    local tarball="$fullname.tar.gz"
+    wget "ftp://ftp.archlinux.org/other/pacman/$tarball"
+    tar xf "$tarball"
+    cd "$fullname"
+    # run configure to generate the makefiles
+    ./configure --sysconfdir=$prefix/etc ac_cv_lib_archive_archive_read_data=yes
+    cd scripts
+    sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' PKGBUILD
+    make makepkg
+}
+
+# Extract makefile from the pacman binary
+bootstrap_makepkg_from_repo() {
+    echo "Bootstrapping makepkg"
+    local mirror="${abs[index]}"
+    # get latest pacman version
+    local entry=$(find_single_pkg "pacman")
+    local repo=$(dirname $entry)
+    local fullname=$(basename $entry)
+    local name=${fullname%-*-*}
+
+    [[ -e "$prefix/tmp" ]] || mkdir -p "$prefix/tmp"
+    pushd "$prefix/tmp" >/dev/null
+
+    # Download precompiled pacman binary package
+    local pkg="$fullname-$arch.pkg.tar.xz"
+    [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
+
+    # Extract makepkg
+    tar -C "$prefix" -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
+
+    cd "$prefix/etc" && patch_makepkg_conf
+    cd "$prefix/usr/bin" && patch_makepkg
+    popd >/dev/null
+}
+
+bootstrap_spackle() {
+    local currentDir="$PWD"
+    local scriptDir=$(cd ${0%/*} && pwd)
+
+    [[ -e "$indexDir/core_index.txt" ]] || update_index
+    bootstrap_makepkg_from_repo
+    echo "Installing spackle dependencies"
+    install_package jansson jshon
+    #install_package zlib bzip2 xz openssl
+    #install_package libarchive pacman
+
+    echo "Installing spackle"
+    mkdir -p "$prefix/usr/bin"
+    cp "$scriptDir/spackle" "$prefix/usr/bin"
+    sed -i -e "s/@INSTALL_DATE@/$(date)/" "$prefix/usr/bin/spackle"
+    sed -i -e "s/@GIT_COMMIT@/$(cd $scriptDir && git rev-parse HEAD)/" "$prefix/usr/bin/spackle"
+    mkdir -p "$prefix/etc/spackle"
+    cp "$scriptDir/rbashrc" "$prefix/etc/spackle/rbashrc"
+    cp "$scriptDir/pathify_spackle" "$prefix/etc/spackle/pathify_spackle"
+    if [[ -e ~/.bashrc ]] && ! grep -q "spackle" ~/.bashrc
+    then
+        echo "source $prefix/etc/spackle/pathify_spackle" >> ~/.bashrc
+    fi
+    if [[ -e ~/.bash_profile ]] && ! grep -q "spackle" ~/.bash_profile
+    then
+        echo "source $prefix/etc/spackle/pathify_spackle" >> ~/.bash_profile
+    fi
+    if [[ -e ~/.zshrc ]] && ! grep -q "spackle" ~/.zshrc
+    then
+        echo "source $prefix/etc/spackle/pathify_spackle" >> ~/.zshrc
+    fi
+
+    echo -e "\033[0;32m"
+    echo "Done"
+    echo ""
+    echo "Setup spackle paths in your current shell by running"
+    echo -e "\033[0m"
+    echo "    source $prefix/etc/spackle/pathify_spackle"
+    echo -e "\033[0;32m"
+    echo "or logout and log back into your shell."
+    echo -en "\033[0m"
+}
+
+clean() {
+    rm -rf "$prefix" "bootstrap"
+}
