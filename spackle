@@ -305,7 +305,7 @@ bootstrap_makepkg_from_source() {
 
 # Extract makefile from the pacman binary
 bootstrap_makepkg_from_repo() {
-    local mirror="${abs[server]}"
+    local mirror="${abs[index]}"
     [[ -e "bootstrap" ]] || mkdir -p "bootstrap"
     cd "bootstrap"
     # get latest pacman version
@@ -316,28 +316,25 @@ bootstrap_makepkg_from_repo() {
 
     # Download precompiled pacman binary package
     local pkg="$fullname-$arch.pkg.tar.xz"
+    [[ -e "$packageDir" ]] || mkdir -p "$packageDir"
+    cd "$packageDir"
     [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
 
     # Extract makepkg
-    tar --strip-components=1 -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
+    [[ -e "$prefix" ]] || mkdir -p "$prefix"
+    tar -C "$prefix" -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
 
-    patch_makepkg_conf
+    cd "$prefix/etc" && patch_makepkg_conf
     
-    # Use tar instead of bsdtar
-    #patch -p0 bin/makepkg < ../makepkg.tar.patch
-    # tar has no "-q" option
-    sed -i -e 's/\(tar -tf "$file"\) -q/\1/' bin/makepkg
-    sed -i -e "s/bsdtar/tar/g" bin/makepkg
-    sed -i -e "s@^confdir=.*@confdir=$prefix/etc@" bin/makepkg
+    cd "$prefix/usr/bin"
+    # Use tar instead of bsdtar since we may not have bsdtar/libarchive
+    sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
+    sed -i -e "s/bsdtar/tar/g" makepkg
+    sed -i -e "s|^confdir=.*|confdir=$prefix/etc|" makepkg
     sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
 true
-}" bin/makepkg
+}" makepkg
 
-    mkdir -p "$packageDir"
-    mkdir -p "$prefix/etc"
-    mkdir -p "$prefix/usr/bin"
-    cp "makepkg.conf" "$prefix/etc/makepkg.conf"
-    cp "bin/makepkg" "$prefix/usr/bin/makepkg"
 }
 
 download_source() {
@@ -592,7 +589,7 @@ build_package() {
 }
 
 bootstrap_spackle() {
-
+    [[ -e "$indexDir/core_index.txt" ]] || update_index
     bootstrap_makepkg_from_repo
     install_package jansson jshon
     #install_package zlib bzip2 xz openssl
