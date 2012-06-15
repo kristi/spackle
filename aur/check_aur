@@ -1,0 +1,43 @@
+#!/bin/bash 
+# Script to validate the packages in the aur_index
+# The aur_index is a list of package names
+# When the aur_index is generated from the aur git mirror,
+# there may be packages that have been deleted from aur, but
+# remain on the git mirror.
+# This script querys aur to find all the current aur packages.
+#
+# Usage
+# ./check_aur ~/local/var/lib/spackle/index/aur_index.txt
+#
+# Requires:
+#   jshon to be on your path
+#   urlencode script in the same directory as this script
+#
+# Note: could modify script to use curl and --data-urlencode instead 
+#   of a separate urlencode script
+#   e.g.  curl --get -d "type=multiinfo" --data-urlencode "arg[]=bisonc++" \
+#           --data-urlencode "arg[]=gtk+-git"
+#
+
+index="${1:-aur_index.txt}"
+rpc_uri="http://aur.archlinux.org/rpc.php?type=multiinfo"
+batch_size=50
+
+[[ ! -e "$index" ]] && echo "index '$index' not found" && return 1
+
+n=0
+a=""
+while read pkg
+do
+    a+="&arg[]=$pkg"
+    if (( ++n == "$batch_size" ))
+    then
+        wget -q -O - "$rpc_uri$a" | jshon -e results -a -e Name -u
+        if [[ $? != 0 ]] ; then
+            echo "$rpc_uri$a" > error.log
+        fi
+        n=0
+        a=""
+    fi
+done < <(sed -e 's/^aur\///' aur_index.txt | ./urlencode)
+wget -q -O - "$rpc_uri$a" | jshon -e results -a -e Name -u

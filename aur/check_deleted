@@ -1,0 +1,10 @@
+#!/bin/bash
+
+uri="http://aur.archlinux.org/rpc.php?type=info"
+while read pkg
+do
+    if [[ $(wget -q -O - "$uri&arg=$pkg") != '{"type":"error","results":"No results found"}' ]]
+    then
+        echo "$pkg"
+    fi
+done < <(cat deleted| ./urlencode)
