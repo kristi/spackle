@@ -1,0 +1,9 @@
+# Start restricted bash shell with this rc file
+# Use env -i to clear environment variables
+#     env -i - bash -r --no-profile --rcfile "/path/to/rbashrc"
+
+export PATH=""
+
+# disable builtins
+enable -n . source bg bind compgen complete compopt  dirs disown exec fc fg hash history jobs kill logout mapfile popd pushd pwd suspend trap ulimit umask wait 
+
