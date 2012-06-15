@@ -54,8 +54,7 @@ SPACKLE_ENV="$HOME/local"
 export SPACKLE_ENV
 
 _OLD_SPACKLE_PATH="$PATH"
-PATH="$SPACKLE_ENV/usr/bin:$SPACKLE_ENV/usr/sbin:$PATH"
-PATH="$HOME/github/spackle:$PATH"  # add spackle to path for development
+PATH="$SPACKLE_ENV/bin:$SPACKLE_ENV/usr/bin:$SPACKLE_ENV/usr/sbin:$PATH"
 export PATH
 
 _OLD_SPACKLE_MANPATH="$MANPATH"
