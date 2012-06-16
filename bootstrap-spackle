@@ -88,8 +88,11 @@ bootstrap_makepkg_from_repo() {
     # Extract makepkg
     tar -C "$prefix" -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
 
-    cd "$prefix/etc" && patch_makepkg_conf
-    cd "$prefix/usr/bin" && patch_makepkg
+    cd "$prefix/etc"
+    patch_makepkg_conf
+    cd "$prefix/usr/bin"
+    patch_makepkg
+    rm -rf "$prefix/tmp"
     popd >/dev/null
 }
 
