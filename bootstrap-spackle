@@ -125,6 +125,8 @@ bootstrap_spackle() {
     # Fake tilde expansion
     prefix="${prefix/\~/$HOME}"
 
+    packageDir="$prefix/var/lib/spackle/pkg"
+
     bootstrap_makepkg_from_repo
 
     echo "Installing spackle"
