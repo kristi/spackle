@@ -4,7 +4,7 @@
 #
 
 # Show line num and func name when debugging with 'set -x'
-export PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+export PS4='+${BASH_SOURCE}:${LINENO}: ' #:${FUNCNAME[0]}: '
 
 
 arch="auto"
