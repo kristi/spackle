@@ -3,6 +3,26 @@
 # Installs spackle
 #
 
+# Show line num and func name when debugging with 'set -x'
+export PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+
+
+arch="auto"
+prefix="$HOME/local"
+
+logFile="$prefix/var/log/spackle.log"
+dbDir="$prefix/var/lib/spackle/db"
+indexDir="$prefix/var/lib/spackle/index"
+packageDir="$prefix/var/lib/spackle/pkg"
+buildDir="$prefix/var/lib/spackle/build"
+#gpgDir="$prefix/etc/spackle.d/gnupg"
+tmpDir="$prefix/tmp"
+
+if [[ "$arch" == "auto" ]]
+then
+    arch=$(uname -m)
+fi
+
 patch_makepkg() {
     # Use tar instead of bsdtar since we may not have bsdtar/libarchive
     sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
@@ -71,15 +91,15 @@ bootstrap_makepkg_from_source() {
 # Extract makefile from the pacman binary
 bootstrap_makepkg_from_repo() {
     echo "Bootstrapping makepkg"
-    local mirror="${abs[index]}"
-    # get latest pacman version
-    local entry=$(find_single_pkg "pacman")
-    local repo=$(dirname $entry)
-    local fullname=$(basename $entry)
-    local name=${fullname%-*-*}
+    local mirror="http://mirrors.kernel.org/archlinux"
 
     [[ -e "$prefix/tmp" ]] || mkdir -p "$prefix/tmp"
     pushd "$prefix/tmp" >/dev/null
+    local repo="core"
+    [[ -e "$repo.db" ]] || wget "$mirror/$repo/os/$arch/$repo.db"
+    # get latest pacman version
+    local name="pacman"
+    local fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
 
     # Download precompiled pacman binary package
     local pkg="$fullname-$arch.pkg.tar.xz"
@@ -95,14 +115,10 @@ bootstrap_makepkg_from_repo() {
 
 bootstrap_spackle() {
     local currentDir="$PWD"
-    local scriptDir=$(cd ${0%/*} && pwd)
+    local scriptDir=$(cd $(dirname $0) && pwd)
 
     [[ -e "$indexDir/core_index.txt" ]] || update_index
     bootstrap_makepkg_from_repo
-    echo "Installing spackle dependencies"
-    install_package jansson jshon
-    #install_package zlib bzip2 xz openssl
-    #install_package libarchive pacman
 
     echo "Installing spackle"
     mkdir -p "$prefix/usr/bin"
@@ -125,6 +141,11 @@ bootstrap_spackle() {
         echo "source $prefix/etc/spackle/pathify_spackle" >> ~/.zshrc
     fi
 
+    echo "Installing spackle dependencies"
+    "$prefix/usr/bin/spackle" install jansson jshon
+    #install_package zlib bzip2 xz openssl
+    #install_package libarchive pacman
+
     echo -e "\033[0;32m"
     echo "Done"
     echo ""
@@ -137,5 +158,25 @@ bootstrap_spackle() {
 }
 
 clean() {
-    rm -rf "$prefix" "bootstrap"
+    rm -rf "$prefix/tmp"
 }
+
+delete() {
+    local choice
+    read -p "Are you sure you want to delete your entire spackle system? (The entire '$prefix' directory will be permanently deleted.) [y,n] " choice 
+    case ${choice:0:1} in  
+        y|Y) echo "";;
+        *) exit 1;;
+    esac
+    rm -rf "$prefix"
+}
+
+# Don't run anything if this script gets sourced
+if [[ "$0" = "$BASH_SOURCE" ]]
+then
+    case "$1" in
+        delete) delete ;;
+        clean) clean ;;
+        *) shift; bootstrap_spackle "$@" ;;
+    esac
+fi
