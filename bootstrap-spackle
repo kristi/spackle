@@ -15,6 +15,29 @@ then
     arch=$(uname -m)
 fi
 
+source colors
+
+success() {
+    echo -en "$GREEN"
+    echo "$@"
+    echo -en "$RESET"
+}
+emph() {
+    echo -en "$LIGHTBLUE"
+    echo "$@"
+    echo -en "$RESET"
+}
+info() {
+    echo -en "$LIGHTWHITE"
+    echo "$@"
+    echo -en "$RESET"
+}
+err() {
+    echo -en "$RED"
+    echo "$@"
+    echo -en "$RESET"
+}
+
 patch_spackle() {
     sed -i -e "s/@INSTALL_DATE@/$(date)/" spackle
     sed -i -e "s/@GIT_COMMIT@/$(cd $scriptDir && git rev-parse HEAD)/" spackle
@@ -70,7 +93,7 @@ patch_pacman_c() {
 
 # Extract makefile from the pacman binary
 bootstrap_makepkg_from_repo() {
-    echo "Bootstrapping makepkg"
+    info "Bootstrapping makepkg"
     local mirror="http://mirrors.kernel.org/archlinux"
 
     [[ -e "$prefix/tmp" ]] || mkdir -p "$prefix/tmp"
@@ -113,14 +136,14 @@ bootstrap_spackle() {
 
     bootstrap_makepkg_from_repo
 
-    echo "Installing spackle"
+    info "Installing spackle"
     mkdir -p "$prefix/usr/bin"
     cp "$scriptDir/spackle" "$prefix/usr/bin"
     (cd $prefix/usr/bin && patch_spackle)
     mkdir -p "$prefix/etc/spackle"
     cp "$scriptDir/rbashrc" "$prefix/etc/spackle/rbashrc"
     cp "$scriptDir/pathify_spackle" "$prefix/usr/bin/pathify_spackle"
-    echo "Installing shell hooks"
+    info "Installing shell hooks"
     if [[ -e ~/.bashrc ]] && ! grep -q "spackle" ~/.bashrc
     then
         echo "source $prefix/usr/bin/pathify_spackle" >> ~/.bashrc
@@ -134,20 +157,19 @@ bootstrap_spackle() {
         echo "source $prefix/usr/bin/pathify_spackle" >> ~/.zshrc
     fi
 
-    echo "Installing spackle dependencies"
+    info "Installing spackle dependencies"
     "$prefix/usr/bin/spackle" install jansson jshon
     #install_package zlib bzip2 xz openssl
     #install_package libarchive pacman
 
-    echo -e "\033[0;32m"
-    echo "Done"
-    echo ""
-    echo "Setup spackle paths in your current shell by running"
-    echo -e "\033[0;29m"
-    echo "    source $prefix/usr/bin/pathify_spackle"
-    echo -e "\033[0;32m"
-    echo "or logout and log back into your shell."
-    echo -en "\033[0m"
+    success ""
+    success "Done"
+    emph ""
+    emph "Setup spackle paths in your current shell by running"
+    emph ""
+    info "    source $prefix/usr/bin/pathify_spackle"
+    emph ""
+    emph "or logout and log back into your shell."
 }
 
 clean() {
