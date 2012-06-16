@@ -10,18 +10,16 @@ export PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
 arch="auto"
 prefix="$HOME/local"
 
-logFile="$prefix/var/log/spackle.log"
-dbDir="$prefix/var/lib/spackle/db"
-indexDir="$prefix/var/lib/spackle/index"
-packageDir="$prefix/var/lib/spackle/pkg"
-buildDir="$prefix/var/lib/spackle/build"
-#gpgDir="$prefix/etc/spackle.d/gnupg"
-tmpDir="$prefix/tmp"
-
 if [[ "$arch" == "auto" ]]
 then
     arch=$(uname -m)
 fi
+
+patch_spackle() {
+    sed -i -e "s/@INSTALL_DATE@/$(date)/" spackle
+    sed -i -e "s/@GIT_COMMIT@/$(cd $scriptDir && git rev-parse HEAD)/" spackle
+    sed -i -e "s|^prefix=.*|prefix=$prefix|" spackle 
+}
 
 patch_makepkg() {
     # Use tar instead of bsdtar since we may not have bsdtar/libarchive
@@ -114,17 +112,25 @@ bootstrap_makepkg_from_repo() {
 }
 
 bootstrap_spackle() {
-    local currentDir="$PWD"
-    local scriptDir=$(cd $(dirname $0) && pwd)
+    echo "args: $*"
+    while (( "$#" > 0 ))
+    do
+        case "$1" in
+            --prefix=*) prefix="${1#*=}" ;;
+            --prefix) shift; prefix="$1" ;;
+            *) echo "Unrecognized option '$1'" return 1;;
+        esac
+        shift
+    done
+    # Fake tilde expansion
+    prefix="${prefix/\~/$HOME}"
 
-    [[ -e "$indexDir/core_index.txt" ]] || update_index
     bootstrap_makepkg_from_repo
 
     echo "Installing spackle"
     mkdir -p "$prefix/usr/bin"
     cp "$scriptDir/spackle" "$prefix/usr/bin"
-    sed -i -e "s/@INSTALL_DATE@/$(date)/" "$prefix/usr/bin/spackle"
-    sed -i -e "s/@GIT_COMMIT@/$(cd $scriptDir && git rev-parse HEAD)/" "$prefix/usr/bin/spackle"
+    (cd $prefix/usr/bin && patch_spackle)
     mkdir -p "$prefix/etc/spackle"
     cp "$scriptDir/rbashrc" "$prefix/etc/spackle/rbashrc"
     cp "$scriptDir/pathify_spackle" "$prefix/etc/spackle/pathify_spackle"
@@ -174,9 +180,12 @@ delete() {
 # Don't run anything if this script gets sourced
 if [[ "$0" = "$BASH_SOURCE" ]]
 then
+    currentDir="$PWD"
+    scriptDir=$(cd $(dirname $0) && pwd)
+
     case "$1" in
-        delete) delete ;;
-        clean) clean ;;
-        *) shift; bootstrap_spackle "$@" ;;
+        delete) shift; delete ;;
+        clean) shift; clean ;;
+        *) bootstrap_spackle "$@" ;;
     esac
 fi
