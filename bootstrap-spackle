@@ -68,24 +68,6 @@ patch_pacman_c() {
     sed -i -e '/if(myuid > 0 && needs_root()) {/,+3 s@^@//@' pacman.c
 }
 
-# BETA! doesn't fully work yet
-# Build makepkg from source
-bootstrap_makepkg_from_source() {
-    local entry=$(find_single_pkg pacman)
-    local repo=$(dirname $entry)
-    local fullname=$(basename $entry)
-    local name=${fullname%-*-*}
-    local tarball="$fullname.tar.gz"
-    wget "ftp://ftp.archlinux.org/other/pacman/$tarball"
-    tar xf "$tarball"
-    cd "$fullname"
-    # run configure to generate the makefiles
-    ./configure --sysconfdir=$prefix/etc ac_cv_lib_archive_archive_read_data=yes
-    cd scripts
-    sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' PKGBUILD
-    make makepkg
-}
-
 # Extract makefile from the pacman binary
 bootstrap_makepkg_from_repo() {
     echo "Bootstrapping makepkg"
