@@ -1,28 +1,21 @@
 #!/bin/bash
 #
-# Build the makepkg script from the pacman source
-# Get the makepkg script from the archlinux repo
-#
-# Since makepkg is just a bash script, we can just extract the file
+# Spackle - a local package manager
 #
 # Install date: @INSTALL_DATE@
 # Git commit: @GIT_COMMIT@
 #
+
+# Show line num and func name when debugging with 'set -x'
+export PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+
 VERSION="0.1alpha"
-INSTALL_DATE="@INSTALL_DATE@"
-GIT_INFO="@GIT_COMMIT@"
 
-prefix="$HOME/local"
-logFile="$prefix/var/log/spackle.log"
-dbDir="$prefix/var/lib/spackle/db"
-indexDir="$prefix/var/lib/spackle/index"
-packageDir="$prefix/var/lib/spackle/pkg"
-buildDir="$prefix/var/lib/spackle/build"
-#gpgDir="$prefix/etc/spackle.d/gnupg"
-tmpDir="$prefix/tmp"
+# Spackle variables
 arch="auto"
+prefix="$HOME/local"
 
-#Don't install these packages (ignore them when required as deps)
+# Don't install these packages (ignore them when required as deps)
 noInstall=(glibc pacman bash sh awk  perl gcc-libs)
 
 # PACKAGE SOURCES
@@ -41,7 +34,15 @@ then
     arch=$(uname -m)
 fi
 
-MAKEPKG="$prefix/usr/bin/makepkg --config $prefix/etc/makepkg.conf"
+logFile="$prefix/var/log/spackle.log"
+dbDir="$prefix/var/lib/spackle/db"
+indexDir="$prefix/var/lib/spackle/index"
+packageDir="$prefix/var/lib/spackle/pkg"
+buildDir="$prefix/var/lib/spackle/build"
+#gpgDir="$prefix/etc/spackle.d/gnupg"
+tmpDir="$prefix/tmp"
+
+MAKEPKG="$prefix/usr/bin/makepkg --config $prefix/etc/makepkg.conf -dd"
 # For downloading abs build files (PKGBUILD and patchfiles)
 
 update_aur_index() {
@@ -314,6 +315,7 @@ install_package() {
     done
 
     [[ -e "$buildDir" ]] || mkdir -p "$buildDir"
+    [[ -e "$packageDir" ]] || mkdir -p "$packageDir"
 
     for arg in "$@" 
     do
@@ -511,15 +513,14 @@ build_package() {
 usage() {
     local script=$(basename "$0")
     echo ""
-    echo "$script Commands:"
+    echo "$script - a local package manager"
+    echo "Commands:"
     echo ""
     echo "    -h          displays help"
     echo "    --help      displays help"
     echo "    --version   displays version"
     echo "    aur3        print package info from aur3.org"
-    echo "    bootstrap   installs bootstrap scripts (including makepkg)"
     echo "    build       download and build a package"
-    echo "    clean       removes installation files"
     echo "    find        find package_name in search index (Perl regex supported)"
     echo "    info        print package info"
     echo "    install     download, build, and install a package"
@@ -535,19 +536,16 @@ usage() {
     echo ""
     echo "Examples:"
     echo ""
-    echo "$script bootstrap"
-    echo "    install bootstrap spackle system"
     echo "$script update"
-    echo "    update the package indices"
-    echo "$script search pacman"
-    echo "    find package with exact name 'pacman'"
+    echo "    update the list of packages available from the server"
+    echo "$script search zsh"
+    echo "    find package with exact name 'zsh'"
     echo "    (repos core, extra, community, and aur are searched)"
     echo "$script search \"pac.*\""
     echo "    find packages that start with 'pac'"
     echo "    (protect regex from bash file expansion by using quotes)"
     echo "$script install zlib"
-    echo "    installs zlib into the bootstrap system"
-    echo "    (note dependencies are NOT auto-installed)"
+    echo "    build and installs zlib"
     echo "$script install --force zlib"
     echo "    force makepkg to rebuild zlib package"
     echo "$script install --no-download zlib"
@@ -566,8 +564,6 @@ print_version() {
 case "$1" in
     -h|help|--help)     usage ;;
     --version|version)  print_version ;;
-    bootstrap)          bootstrap_spackle ;;
-    clean)              clean ;;
     find|search)        shift; find_pkg "$1" ;;
     update)             update_index ;;
     build)              shift; build_package "$@" ;;
