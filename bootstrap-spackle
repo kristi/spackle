@@ -115,22 +115,23 @@ bootstrap_makepkg_from_repo() {
     patch_makepkg_conf
     cd "$prefix/usr/bin"
     patch_makepkg
-    rm -rf "$prefix/tmp"
     popd >/dev/null
+    rm -rf "$prefix/tmp"
 }
 
 bootstrap_spackle() {
     while (( "$#" > 0 ))
     do
         case "$1" in
-            --prefix=*) prefix="${1#*=}" ;;
-            --prefix) shift; prefix="$1" ;;
-            *) echo "Unrecognized option '$1'" return 1;;
+            --prefix=*) eval prefix=${1#*=} ;;
+            --prefix) shift; prefix=$1 ;;
+            *) err "Unrecognized option '$1'";  return 1;;
         esac
         shift
     done
-    # Fake tilde expansion
-    prefix="${prefix/\~/$HOME}"
+    mkdir -p "$prefix"
+    # Set prefix to an absolute path
+    prefix=$(cd $prefix; pwd)
 
     packageDir="$prefix/var/lib/spackle/pkg"
 
