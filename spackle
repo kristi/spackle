@@ -56,7 +56,7 @@ update_aur_index() {
         cd $indexDir
         wget http://aur3.org/all_pkgbuilds.tar.gz
         # uncompress for faster dependency extraction
-        gunzip -c > all_pkgbuilds.tar
+        gunzip -c all_pkgbuilds.tar.gz
     )
 }
 
