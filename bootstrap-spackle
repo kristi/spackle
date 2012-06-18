@@ -131,10 +131,13 @@ bootstrap_spackle() {
         case "$1" in
             --prefix=*) eval prefix=${1#*=} ;;
             --prefix) shift; prefix=$1 ;;
-            *) err "Unrecognized option '$1'";  return 1;;
+            *) err "Unrecognized option '$1'" ;;
         esac
         shift
     done
+    [[ "${prefix:0:1}" != "/" ]] && err "prefix must be an absolute path (prefix='$prefix')" 
+    info "Installing spackle to '$prefix'"
+    sleep 3
     mkdir -p "$prefix"
     # Set prefix to an absolute path
     prefix=$(cd $prefix; pwd)
@@ -143,7 +146,7 @@ bootstrap_spackle() {
 
     bootstrap_makepkg_from_repo
 
-    info "Installing spackle"
+    info "Installing spackle script"
     mkdir -p "$prefix/usr/bin"
     cp "$scriptDir/spackle" "$prefix/usr/bin"
     (cd $prefix/usr/bin && patch_spackle)
