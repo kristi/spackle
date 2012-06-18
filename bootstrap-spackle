@@ -46,6 +46,10 @@ patch_spackle() {
     sed -i -e "s|^prefix=.*|prefix=$prefix|" spackle 
 }
 
+patch_spackle_pathify() {
+    sed -i -e "s|^SPACKLE_PREFIX=.*|SPACKLE_PREFIX=$prefix|" spackle-pathify
+}
+
 patch_makepkg() {
     # Use tar instead of bsdtar since we may not have bsdtar/libarchive
     sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
@@ -145,19 +149,22 @@ bootstrap_spackle() {
     (cd $prefix/usr/bin && patch_spackle)
     mkdir -p "$prefix/etc/spackle"
     cp "$scriptDir/rbashrc" "$prefix/etc/spackle/rbashrc"
-    cp "$scriptDir/pathify_spackle" "$prefix/usr/bin/pathify_spackle"
+    cp "$scriptDir/colors" "$prefix/etc/spackle/colors"
+    cp "$scriptDir/spackle-pathify" "$prefix/etc/spackle/spackle-pathify"
+    (cd "$prefix/etc/spackle" && patch_spackle_pathify)
+    ln -fs "$prefix/etc/spackle/spackle-pathify" "$HOME/.spackle"
     info "Installing shell hooks"
     if [[ -e ~/.bashrc ]] && ! grep -q "spackle" ~/.bashrc
     then
-        echo "source $prefix/usr/bin/pathify_spackle" >> ~/.bashrc
+        echo "source ~/.spackle" >> ~/.bashrc
     fi
     if [[ -e ~/.bash_profile ]] && ! grep -q "spackle" ~/.bash_profile
     then
-        echo "source $prefix/usr/bin/pathify_spackle" >> ~/.bash_profile
+        echo "source ~/.spackle" >> ~/.bash_profile
     fi
     if [[ -e ~/.zshrc ]] && ! grep -q "spackle" ~/.zshrc
     then
-        echo "source $prefix/usr/bin/pathify_spackle" >> ~/.zshrc
+        echo "source ~/.spackle" >> ~/.zshrc
     fi
 
     info "Installing spackle dependencies"
@@ -170,7 +177,7 @@ bootstrap_spackle() {
     emph ""
     emph "Setup spackle paths in your current shell by running"
     emph ""
-    info "    source $prefix/usr/bin/pathify_spackle"
+    info "    source ~/.spackle"
     emph ""
     emph "or logout and log back into your shell."
 }
