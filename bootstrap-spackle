@@ -15,7 +15,7 @@ then
     arch=$(uname -m)
 fi
 
-source colors
+source $(dirname $0)/colors
 
 success() {
     echo -en "$GREEN"
