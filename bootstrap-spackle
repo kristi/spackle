@@ -61,7 +61,7 @@ true
 }
 
 patch_makepkg_conf() {
-    sed -i -e '/^BUILDENV/ s/fakeroot/!fakeroot/' makepkg.conf
+    #sed -i -e '/^BUILDENV/ s/fakeroot/!fakeroot/' makepkg.conf
     sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' makepkg.conf
     sed -i -e "s@^#PKGDEST=/home/packages@PKGDEST=$packageDir@" makepkg.conf
     sed -i -e "/^CFLAGS/   s@\"\$@ -I$prefix/usr/include\"@" makepkg.conf
@@ -97,31 +97,40 @@ patch_pacman_c() {
     sed -i -e '/if(myuid > 0 && needs_root()) {/,+3 s@^@//@' pacman.c
 }
 
-# Extract makefile from the pacman binary
-bootstrap_makepkg_from_repo() {
-    info "Bootstrapping makepkg"
-    local mirror="http://mirrors.kernel.org/archlinux"
+patch_fakeroot() {
+    sed -i -e "s|^FAKEROOT_PREFIX=|FAKEROOT_PREFIX=$prefix|" fakeroot
+    sed -i -e "s|^FAKEROOT_BINDIR=|FAKEROOT_BINDIR=$prefix|" fakeroot
+    sed -i -e "s|^PATHS=|PATHS=$prefix|" fakeroot
+}
 
-    [[ -e "$prefix/tmp" ]] || mkdir -p "$prefix/tmp"
-    pushd "$prefix/tmp" >/dev/null
-    local repo="core"
+# Bootstrap from archlinux binary packages
+bootstrap_from_repo() {
+    local mirror repo name fullname pkg
+
+    mirror="http://mirrors.kernel.org/archlinux"
+    repo="core"
     [[ -e "$repo.db" ]] || wget "$mirror/$repo/os/$arch/$repo.db"
-    # get latest pacman version
-    local name="pacman"
-    local fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
 
-    # Download precompiled pacman binary package
-    local pkg="$fullname-$arch.pkg.tar.xz"
+    # Get makepkg from pacman
+    info "Bootstrapping makepkg"
+    name="pacman"
+    fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
+    pkg="$fullname-$arch.pkg.tar.xz"
     [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
-
-    # Extract makepkg
     tar -C "$prefix" -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
+    (cd "$prefix/etc" && patch_makepkg_conf)
+    (cd "$prefix/usr/bin" && patch_makepkg)
 
-    cd "$prefix/etc"
-    patch_makepkg_conf
-    cd "$prefix/usr/bin"
-    patch_makepkg
-    popd >/dev/null
+    # Fakeroot
+    info "Bootstrapping fakeroot"
+    name="fakeroot"
+    fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
+    pkg="$fullname-$arch.pkg.tar.xz"
+    [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
+    tar -C "$prefix" -xf "$pkg"
+    (cd "$prefix/usr/bin" && patch_fakeroot)
+
+    # Cleanup
     rm -rf "$prefix/tmp"
 }
 
@@ -144,7 +153,7 @@ bootstrap_spackle() {
 
     packageDir="$prefix/var/lib/spackle/pkg"
 
-    bootstrap_makepkg_from_repo
+    bootstrap_from_repo
 
     info "Installing spackle script"
     mkdir -p "$prefix/usr/bin"
