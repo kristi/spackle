@@ -34,8 +34,10 @@ info() {
 }
 err() {
     echo -en "$RED"
+    echo "${BASH_SOURCE[1]}:${LINENO[1]}: "
     echo "$@"
     echo -en "$RESET"
+    exit 1
 }
 
 patch_spackle() {
