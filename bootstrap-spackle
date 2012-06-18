@@ -34,7 +34,7 @@ info() {
 }
 err() {
     echo -en "$RED"
-    echo "${BASH_SOURCE[1]}:${LINENO[1]}: "
+    echo "${BASH_SOURCE[1]}:${BASH_LINENO[0]}:${FUNCNAME[1]} "
     echo "$@"
     echo -en "$RESET"
     exit 1
@@ -106,17 +106,19 @@ patch_fakeroot() {
 # Bootstrap from archlinux binary packages
 bootstrap_from_repo() {
     local mirror repo name fullname pkg
+    [[ -e "$prefix/tmp" ]] || mkdir -p "$prefix/tmp"
+    pushd "$prefix/tmp" >/dev/null
 
     mirror="http://mirrors.kernel.org/archlinux"
     repo="core"
-    [[ -e "$repo.db" ]] || wget "$mirror/$repo/os/$arch/$repo.db"
+    [[ -e "$repo.db" ]] || wget -nv "$mirror/$repo/os/$arch/$repo.db"
 
     # Get makepkg from pacman
     info "Bootstrapping makepkg"
     name="pacman"
     fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
     pkg="$fullname-$arch.pkg.tar.xz"
-    [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
+    [[ -e "$pkg" ]] || wget -nv "$mirror/$repo/os/$arch/$pkg"
     tar -C "$prefix" -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
     (cd "$prefix/etc" && patch_makepkg_conf)
     (cd "$prefix/usr/bin" && patch_makepkg)
@@ -126,11 +128,12 @@ bootstrap_from_repo() {
     name="fakeroot"
     fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
     pkg="$fullname-$arch.pkg.tar.xz"
-    [[ -e "$pkg" ]] || wget "$mirror/$repo/os/$arch/$pkg"
+    [[ -e "$pkg" ]] || wget -nv "$mirror/$repo/os/$arch/$pkg"
     tar -C "$prefix" -xf "$pkg"
     (cd "$prefix/usr/bin" && patch_fakeroot)
 
     # Cleanup
+    popd >/dev/null
     rm -rf "$prefix/tmp"
 }
 
@@ -146,11 +149,10 @@ bootstrap_spackle() {
     done
     [[ "${prefix:0:1}" != "/" ]] && err "prefix must be an absolute path (prefix='$prefix')" 
     info "Installing spackle to '$prefix'"
-    sleep 3
+    sleep 1
     mkdir -p "$prefix"
     # Set prefix to an absolute path
     prefix=$(cd $prefix; pwd)
-
     packageDir="$prefix/var/lib/spackle/pkg"
 
     bootstrap_from_repo
@@ -165,6 +167,7 @@ bootstrap_spackle() {
     cp "$scriptDir/spackle-pathify" "$prefix/etc/spackle/spackle-pathify"
     (cd "$prefix/etc/spackle" && patch_spackle_pathify)
     ln -fs "$prefix/etc/spackle/spackle-pathify" "$HOME/.spackle"
+
     info "Installing shell hooks"
     if [[ -e ~/.bashrc ]] && ! grep -q "spackle" ~/.bashrc
     then
@@ -181,8 +184,8 @@ bootstrap_spackle() {
 
     info "Installing spackle dependencies"
     "$prefix/usr/bin/spackle" install jansson jshon
-    #install_package zlib bzip2 xz openssl
-    #install_package libarchive pacman
+    #zlib bzip2 xz openssl
+    #libarchive pacman
 
     success ""
     success "Done"
