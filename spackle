@@ -34,21 +34,52 @@ then
     arch=$(uname -m)
 fi
 
-logFile="$prefix/var/log/spackle.log"
 dbDir="$prefix/var/lib/spackle/db"
 indexDir="$prefix/var/lib/spackle/index"
 packageDir=$(source "$prefix/etc/makepkg.conf"; echo "$PKGDEST")
 buildDir="$prefix/var/lib/spackle/build"
 #gpgDir="$prefix/etc/spackle.d/gnupg"
 tmpDir="$prefix/tmp"
+logFile="$prefix/var/log/spackle.log"
 
 MAKEPKG="$prefix/usr/bin/makepkg --config $prefix/etc/makepkg.conf -dd"
 # For downloading abs build files (PKGBUILD and patchfiles)
 
+
+[[ -e "$prefix/etc/spackle/colors" ]] && source "$prefix/etc/spackle/colors"
+
+success() {
+    echo -en "$GREEN" >&2
+    echo "$@" >&2
+    echo -en "$RESET" >&2
+}
+emph() {
+    echo -en "$LIGHTBLUE" >&2
+    echo "$@" >&2
+    echo -en "$RESET" >&2
+}
+info() {
+    echo -en "$LIGHTWHITE" >&2
+    echo "$@" >&2
+    echo -en "$RESET" >&2
+}
+warn() {
+    echo -en "$YELLOW" >&2
+    echo "$@" >&2
+    echo -en "$RESET" >&2
+}
+err() {
+    echo -en "$RED" >&2
+    echo "$@" >&2
+    echo -en "$RESET" >&2
+    exit 1
+}
+
+
 update_aur_index() {
     [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
     # Update from file list of the aur git mirror (approx 6 sec)
-    echo "Updating ArchLinux AUR index" >&2
+    info "Updating ArchLinux AUR index" 
     curl "http://pkgbuild.com/git/aur-mirror.git/plain" | grep '^  <li>' | sed -e 's/<[^>]*>//g' -e 's/^\s*/aur\//' > "$indexDir/aur_index.txt"
 
     # Download PKGBUILDS so we have dependency info
@@ -62,7 +93,7 @@ update_aur_index() {
 
 update_abs_index() {
     [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
-    echo "Updating ArchLinux ABS index" >&2
+    info "Updating ArchLinux ABS index"
     local mirror="${abs[index]}"
     local repo
     for repo in core extra community
@@ -159,7 +190,7 @@ get_aur3_pkgbuild() {
 
 get_local_version() {
     local name="$1"
-    [[ ! -e "$dbDir/$name/desc" ]] && echo "package '$name' not installed" >&2 && return 1
+    [[ ! -e "$dbDir/$name/desc" ]] && warn "package '$name' not installed" && return 1
     sed -ne '/%PKGVER%/,/^$/{//d;p}' "$dbDir/$name/desc"
 }
 
@@ -167,7 +198,7 @@ get_server_version() {
     # print depends list, one per line
     local entry="$1"
     [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
-    [[ "${#entry}" == 0 ]] && echo "spackle: Error: package '$1' not found" >&2 && return 1
+    [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=${entry%/*}
     local fullname=${entry#*/}
     local name=${fullname%-*-*}
@@ -183,7 +214,7 @@ get_server_version() {
 get_deps() {
     # print depends list, one per line
     local entry=$(find_single_pkg "$1")
-    [[ "${#entry}" == 0 ]] && echo "spackle: Error: package '$1' not found" >&2 && return 1
+    [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=${entry%/*}
     local fullname=${entry#*/}
     local name=${fullname%-*-*}
@@ -259,7 +290,7 @@ download_source() {
     local fullname=$(basename $entry)
     local name=${fullname%-*-*}
 
-    echo "Downloading $entry" >&2
+    info "Downloading $entry" >&2
     cd "$buildDir"
     rm -rf "$name"
 
@@ -272,7 +303,7 @@ download_source() {
         aur)
             curl "http://aur.archlinux.org/packages/${name:0:2}/$name/$name.tar.gz" | tar -zx
             ;;
-        *) echo "Unrecognized repo: '$repo'" >&2
+        *) warn "Unrecognized repo: '$repo'"
     esac
 
     cd "$name"
@@ -309,7 +340,7 @@ install_package() {
         --skipchecksums|\
         --source)
                        makepkg_flags="$makepkg_flags $1" ;;
-        *)             echo "Skipping unrecognized option '$1'" >&2 ;;
+        *)             warn "Skipping unrecognized option '$1'" ;;
         esac
         shift
     done
@@ -319,29 +350,35 @@ install_package() {
 
     for arg in "$@" 
     do
+        #TODO: error check to make sure entry exists
         local entry=$(find_single_pkg "$arg")
         local repo=$(dirname "$entry")
         local fullname=$(basename $entry)
         local name=${fullname%-*-*}
 
-        echo "" >&2
         if [[ -e "$arg" ]]
         then
+            # TODO: implement installing from pkg.tar.xz file
+            # spackle install foobar.okg.tar.xz
+            info "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'" >&2
             :
+            warn "installation not implemented"
         elif [[ -e "$packageDir/$fullname-$arch.pkg.tar.xz" ]]
         then
-            echo "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'" >&2
+            #TODO write err function
+            info "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'" >&2
+            warn "installation not implemented"
         else
             if [[ -e "$buildDir/$name" ]]
             then
-                echo "Build directory '$buildDir/$name' exists" >&2
+                info "Build directory '$buildDir/$name' exists, skip downloading" >&2
             elif [[ "$no_download" != true ]] 
             then
                 download_source "$entry"
             fi
 
             cd "$buildDir/$name"
-            echo "Building $entry" >&2
+            info "Building $entry" >&2
             $MAKEPKG $makepkg_flags
         fi
 
@@ -351,7 +388,7 @@ install_package() {
 
         for package_file in $(find "$packageDir" -name "$fullname*.pkg.tar.xz")
         do
-            echo "Installing $(basename $package_file)" >&2
+            info "Installing $(basename $package_file)"
             mkdir -p "$dbDir/$name"
             cd "$dbDir/$name"
             #TODO: if $prefix changes, strip-components needs to change
@@ -375,7 +412,7 @@ upgrade_package() {
         local remote_ver=$(get_server_version "$name")
         if [[ -z "$remote_ver" ]]
         then
-            echo "no remote version found" >&2
+            warn "no remote version found" >&2
             continue
         elif [[ "$local_ver" = "$remote_ver" ]]
         then
@@ -387,17 +424,17 @@ upgrade_package() {
     done
     if (( "${#upgradable[@]}" == 0 ))
     then
-        echo "System up to date"
+        info "System up to date"
         return 0
     fi
     read -p "Upgrade ${#upgradable[@]} package${upgradable[1]:+s}? [y,n] " choice 
     case ${choice:0:1} in  
-        y|Y) echo "";;
+        y|Y) info "";;
         *) return 1;;
     esac
     for name in "${upgradable[@]}"
     do
-        echo "Upgrade '$name'"
+        info "Upgrade '$name'"
         uninstall_package $name
         install_package $name
     done
@@ -445,8 +482,8 @@ parse_pkginfo() {
 uninstall_package() {
     local name file dir dir_list
     name="$1"
-    [[ ! -e "$dbDir/$name" ]] && echo "Package '$name' not installed" >&2 && return 1
-    [[ ! -e "$dbDir/$name/files" ]] && echo "Package '$name' missing files list" >&2
+    [[ ! -e "$dbDir/$name" ]] && err "Package '$name' not installed"
+    [[ ! -e "$dbDir/$name/files" ]] && err "Package '$name' missing files list"
 
     # Delete files first
     while read file
@@ -466,7 +503,7 @@ uninstall_package() {
     done
 
     rm -rf "$dbDir/$name"
-    echo "Uninstalled '$name'" >&2
+    info "Uninstalled '$name'"
 
     hash -r
 }
