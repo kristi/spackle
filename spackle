@@ -166,8 +166,25 @@ get_desc() {
     fi
 }
 
+get_property(){
+    local entry="$1"
+    local property="$2"
+    local repo=$(dirname "$entry")
+    local fullname=$(basename "$entry")
+
+    if [[ "$repo" == "aur" ]]
+    then
+        warn "No desc file for AUR packages ($entry)"
+        return 1
+    fi
+
+    tar -Oxf "$indexDir/$repo.db" "$fullname/desc" |
+        sed -n -e "/^%${property^^}%$/,/^$/ {//d; p}"
+}
+
 get_pkgbuild() {
     # print PKGBUILD to stdout
+    #TODO: don't call find_pkg here
     local entry=$(find_single_pkg "$1")
     local repo=$(dirname "$entry")
     local fullname=$(basename "$entry")
@@ -177,6 +194,7 @@ get_pkgbuild() {
     then
         curl -sS https://aur.archlinux.org/packages/${name:0:2}/$name/PKGBUILD
     else
+        local arch=$(get_property "$entry" "arch")
         mkdir -p "$tmpDir/$name"
         rsync "rsync.archlinux.org::abs/$arch/$repo/$name/PKGBUILD" "$tmpDir/$name/PKGBUILD" 
         cat "$tmpDir/$name/PKGBUILD"
@@ -301,9 +319,8 @@ download_source() {
 
     case "$repo" in
         core|extra|community)
-            # TODO proper arch detection for "any"
-            rsync -q $rsync_flags "${abs[server]}::abs/$arch/$repo/$name" . ||
-                rsync -q $rsync_flags "${abs[server]}::abs/any/$repo/$name" . 
+            local arch=$(get_property "$entry" "arch")
+            rsync -q $rsync_flags "${abs[server]}::abs/$arch/$repo/$name" . 
             ;;
         aur)
             curl "http://aur.archlinux.org/packages/${name:0:2}/$name/$name.tar.gz" | tar -zx
