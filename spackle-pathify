@@ -13,18 +13,49 @@ deactivate_spackle () {
     # reset old environment variables
     if [ -n "${_OLD_SPACKLE_PATH+set}" ] ; then
         PATH="$_OLD_SPACKLE_PATH"
-        export PATH
+        [ -z "$PATH" ] && unset PATH || export PATH
         unset _OLD_SPACKLE_PATH
     fi
-    if [ -n "$_OLD_SPACKLE_MANPATH" ] ; then
+    if [ -n "${_OLD_SPACKLE_MANPATH+set}" ] ; then
         MANPATH="$_OLD_SPACKLE_MANPATH"
-        export MANPATH
+        [ -z "$MANPATH" ] && unset MANPATH || export MANPATH
         unset _OLD_SPACKLE_MANPATH
     fi
-    if [ -n "$_OLD_SPACKLE_INFOPATH" ] ; then
+    if [ -n "${_OLD_SPACKLE_INFOPATH+set}" ] ; then
         INFOPATH="$_OLD_SPACKLE_INFOPATH"
-        export INFOPATH
+        [ -z "$INFOPATH" ] && unset INFOPATH || export INFOPATH
         unset _OLD_SPACKLE_INFOPATH
+    fi
+
+    if [ -n "${_OLD_SPACKLE_CFLAGS+set}" ] ; then
+        CFLAGS="$_OLD_SPACKLE_CFLAGS"
+        [ -z "$CFLAGS" ] && unset CFLAGS || export CFLAGS
+        unset _OLD_SPACKLE_CFLAGS
+    fi
+    if [ -n "${_OLD_SPACKLE_CXXFLAGS+set}" ] ; then
+        CXXFLAGS="$_OLD_SPACKLE_CXXFLAGS"
+        [ -z "$CXXFLAGS" ] && unset CXXFLAGS || export CXXFLAGS
+        unset _OLD_SPACKLE_CXXFLAGS
+    fi
+    if [ -n "${_OLD_SPACKLE_CPPFLAGS+set}" ] ; then
+        CPPFLAGS="$_OLD_SPACKLE_CPPFLAGS"
+        [ -z "$CPPFLAGS" ] && unset CPPFLAGS || export CPPFLAGS
+        unset _OLD_SPACKLE_CPPFLAGS
+    fi
+    if [ -n "${_OLD_SPACKLE_LDFLAGS+set}" ] ; then
+        LDFLAGS="$_OLD_SPACKLE_LDFLAGS"
+        [ -z "$LDFLAGS" ] && unset LDFLAGS || export LDFLAGS
+        unset _OLD_SPACKLE_LDFLAGS
+    fi
+    if [ -n "${_OLD_SPACKLE_LD_RUN_PATH+set}" ] ; then
+        LD_RUN_PATH="$_OLD_SPACKLE_LD_RUN_PATH"
+        [ -z "$LD_RUN_PATH" ] && unset LD_RUN_PATH || export LD_RUN_PATH
+        unset _OLD_SPACKLE_LD_RUN_PATH
+    fi
+    if [ -n "${_OLD_SPACKLE_MAKEFLAGS+set}" ] ; then
+        MAKEFLAGS="$_OLD_SPACKLE_MAKEFLAGS"
+        [ -z "$MAKEFLAGS" ] && unset MAKEFLAGS || export MAKEFLAGS
+        unset _OLD_SPACKLE_MAKEFLAGS
     fi
 
     # This should detect bash and zsh, which have a hash command that must
@@ -40,6 +71,7 @@ deactivate_spackle () {
         unset _OLD_SPACKLE_PS1
     fi
 
+    unset SPACKLE_ENV
     unset SPACKLE_PREFIX
     if [ ! "$1" = "nondestructive" ] ; then
     # Self destruct!
@@ -57,29 +89,37 @@ SPACKLE_PREFIX="$HOME/local"
 export SPACKLE_PREFIX
 
 _OLD_SPACKLE_PATH="$PATH"
-PATH="$SPACKLE_PREFIX/bin:$SPACKLE_PREFIX/usr/bin:$SPACKLE_PREFIX/usr/sbin:$PATH"
-export PATH
+export PATH="$SPACKLE_PREFIX/bin:$SPACKLE_PREFIX/usr/bin:$SPACKLE_PREFIX/usr/sbin:$PATH"
 
 _OLD_SPACKLE_MANPATH="$MANPATH"
-MANPATH="$SPACKLE_PREFIX/usr/share/man:$MANPATH"
-export MANPATH
+export MANPATH="$SPACKLE_PREFIX/usr/share/man:$MANPATH"
 
 _OLD_SPACKLE_INFOPATH="$INFOPATH"
-INFOPATH="$SPACKLE_PREFIX/usr/share/info:$INFOPATH"
-export INFOPATH
+export INFOPATH="$SPACKLE_PREFIX/usr/share/info:$INFOPATH"
+
+_OLD_SPACKLE_CFLAGS="$CFLAGS"
+export CFLAGS="-I$SPACKLE_PREFIX/usr/include $CFLAGS"
+
+_OLD_SPACKLE_CXXFLAGS="$CXXFLAGS"
+export CXXFLAGS="-I$SPACKLE_PREFIX/usr/include $CXXFLAGS"
+
+_OLD_SPACKLE_CPPFLAGS="$CPPFLAGS"
+export CPPFLAGS="-I$SPACKLE_PREFIX/usr/include $CPPFLAGS"
+
+_OLD_SPACKLE_LDFLAGS="$LDFLAGS"
+export LDFLAGS="-L$SPACKLE_PREFIX/usr/lib -Wl,-rpath,$SPACKLE_PREFIX/usr/lib $LDFLAGS"
+
+_OLD_SPACKLE_LD_RUN_PATH="$LD_RUN_PATH"
+export LD_RUN_PATH="$SPACKLE_PREFIX/usr/lib:$LD_RUN_PATH"
+
+_OLD_SPACKLE_MAKEFLAGS="$MAKEFLAGS"
+export MAKEFLAGS="-j1 $MAKEFLAGS"
 
 if [ -z "$SPACKLE_PREFIX_DISABLE_PROMPT" ] &&
    [ -z "$PATHIFY_DISABLE_PROMPT" ] ; then
     _OLD_SPACKLE_PS1="$PS1"
-    if [ "`basename \"$SPACKLE_PREFIX\"`" = "__" ] ; then
-        # special case for Aspen magic directories
-        # see http://www.zetadev.com/software/aspen/
-        PS1="[spackle] $PS1"
-    else
-        #PS1="(`basename \"$SPACKLE_PREFIX\"`)$PS1"
-        # Add env name before first non-whitespace PS1 char
-        PS1=$(echo "$PS1" | sed -e '0,/\S/s//[spackle] &/')
-    fi
+    # Add env name before first non-whitespace PS1 char
+    PS1=$(echo "$PS1" | sed -e '0,/\S/ s//[spackle] &/')
     export PS1
 fi
 
@@ -89,3 +129,5 @@ fi
 if [ -n "$BASH" -o -n "$ZSH_VERSION" ] ; then
     hash -r
 fi
+
+# vim: set ft=zsh ts=4 sw=4 sts=4 et:
