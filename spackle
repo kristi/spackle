@@ -155,8 +155,8 @@ get_deps_from_aur3() {
 
 get_desc() {
     local entry=$(find_single_pkg "$1")
-    local repo=$(dirname $entry)
-    local fullname=$(basename $entry)
+    local repo=$(dirname "$entry")
+    local fullname=$(basename "$entry")
     local name=${fullname%-*-*}
     if [[ "$repo" == "aur" ]]
     then
@@ -169,8 +169,8 @@ get_desc() {
 get_pkgbuild() {
     # print PKGBUILD to stdout
     local entry=$(find_single_pkg "$1")
-    local repo=$(dirname $entry)
-    local fullname=$(basename $entry)
+    local repo=$(dirname "$entry")
+    local fullname=$(basename "$entry")
     local name=${fullname%-*-*}
 
     if [[ "$repo" == "aur" ]]
@@ -187,8 +187,8 @@ get_pkgbuild() {
 get_aur3_pkgbuild() {
     # print PKGBUILD to stdout
     local entry=$(find_single_pkg "$1")
-    local repo=$(dirname $entry)
-    local fullname=$(basename $entry)
+    local repo=$(dirname "$entry")
+    local fullname=$(basename "$entry")
     local name=${fullname%-*-*}
     tar -Oxf "$indexDir/all_pkgbuilds.tar" "mirror/$name/PKGBUILD"
 }
@@ -292,7 +292,7 @@ get_all_deps() {
 download_source() {
     local entry="$1"
     local repo=$(dirname "$entry")
-    local fullname=$(basename $entry)
+    local fullname=$(basename "$entry")
     local name=${fullname%-*-*}
 
     report "Downloading $entry"
