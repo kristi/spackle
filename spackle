@@ -7,7 +7,7 @@
 #
 
 # Show line num and func name when debugging with 'set -x'
-export PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+export PS4='+${BASH_SOURCE}:${LINENO}: ' #${FUNCNAME[0]}: '
 
 VERSION="0.1alpha"
 
@@ -126,11 +126,11 @@ find_pkg() {
     for repo in core extra community
     do
         [[ -e "$indexDir/${repo}_index.txt" ]] || update_abs_index
-        grep -P "/$1-[^-]*-[0-9]*$" "$indexDir/${repo}_index.txt"
+        grep "/$1-[^-]*-[0-9]*\$" "$indexDir/${repo}_index.txt"
     done
 
     [[ -e "$indexDir/aur_index.txt" ]] || update_aur_index
-    grep -P "/$1\$" "$indexDir/aur_index.txt"
+    grep "/$1\$" "$indexDir/aur_index.txt"
     #tar --exclude="*/*" -tf "$repo.db" | grep "^$1-[^-]*-[0-9]*/$" | sed 's@/$@@'
     #tar --exclude="*/*" -ztf "$repo.db" | sed -n 's@^\('"$1"'-[^-]*-[0-9]*\)/$@\1@p' 
     # Use curl to avoid saving the db file
@@ -358,7 +358,7 @@ install_package() {
         #TODO: error check to make sure entry exists
         local entry=$(find_single_pkg "$arg")
         local repo=$(dirname "$entry")
-        local fullname=$(basename $entry)
+        local fullname=$(basename "$entry")
         local name=${fullname%-*-*}
         local packages=()
 
@@ -368,6 +368,10 @@ install_package() {
             # spackle install foobar.okg.tar.xz
             report "Package found at '$arg'"
             packages+=("$arg")
+        elif [[ -z "$entry" ]]
+        then
+            warn "No package found for '$arg'"
+            continue
         elif [[ -e "$packageDir/$fullname-$arch.pkg.tar.xz" ]]
         then
             report "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'"
