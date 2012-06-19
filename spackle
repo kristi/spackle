@@ -376,6 +376,10 @@ install_package() {
         then
             report "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'"
             packages+=("$packageDir/$fullname-$arch.pkg.tar.xz")
+        elif [[ -e "$packageDir/$fullname-any.pkg.tar.xz" ]]
+        then
+            report "Package found at '$packageDir/$fullname-any.pkg.tar.xz'"
+            packages+=("$packageDir/$fullname-any.pkg.tar.xz")
         else
             if [[ -e "$buildDir/$name" ]]
             then
@@ -388,13 +392,14 @@ install_package() {
             cd "$buildDir/$name"
             report "Building $entry"
             $MAKEPKG $makepkg_flags
+            packages+=( $(find "$packageDir" -name "$fullname*.pkg.tar.xz") )
         fi
 
         [[ "$build_only" == "true" ]] && continue
 
         [[ -e "$dbDir" ]] || mkdir -p "$dbDir"
 
-        for package_file in $(find "$packageDir" -name "$fullname*.pkg.tar.xz")
+        for package_file in "${packages[@]}"
         do
             report "Installing $(basename $package_file)"
             mkdir -p "$dbDir/$name"
