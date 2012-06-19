@@ -58,8 +58,13 @@ emph() {
     echo "$@" >&2
     echo -en "$RESET" >&2
 }
-info() {
+report() {
     echo -en "$LIGHTWHITE" >&2
+    echo "$@" >&2
+    echo -en "$RESET" >&2
+}
+msg() {
+    echo -en "$LIGHTBLACK" >&2
     echo "$@" >&2
     echo -en "$RESET" >&2
 }
@@ -79,7 +84,7 @@ err() {
 update_aur_index() {
     [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
     # Update from file list of the aur git mirror (approx 6 sec)
-    info "Updating ArchLinux AUR index" 
+    report "Updating ArchLinux AUR index" 
     curl "http://pkgbuild.com/git/aur-mirror.git/plain" | grep '^  <li>' | sed -e 's/<[^>]*>//g' -e 's/^\s*/aur\//' > "$indexDir/aur_index.txt"
 
     # Download PKGBUILDS so we have dependency info
@@ -93,7 +98,7 @@ update_aur_index() {
 
 update_abs_index() {
     [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
-    info "Updating ArchLinux ABS index"
+    report "Updating ArchLinux ABS index"
     local mirror="${abs[index]}"
     local repo
     for repo in core extra community
@@ -290,7 +295,7 @@ download_source() {
     local fullname=$(basename $entry)
     local name=${fullname%-*-*}
 
-    info "Downloading $entry" >&2
+    report "Downloading $entry"
     cd "$buildDir"
     rm -rf "$name"
 
@@ -355,30 +360,29 @@ install_package() {
         local repo=$(dirname "$entry")
         local fullname=$(basename $entry)
         local name=${fullname%-*-*}
+        local packages=()
 
         if [[ -e "$arg" ]]
         then
             # TODO: implement installing from pkg.tar.xz file
             # spackle install foobar.okg.tar.xz
-            info "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'" >&2
-            :
-            warn "installation not implemented"
+            report "Package found at '$arg'"
+            packages+=("$arg")
         elif [[ -e "$packageDir/$fullname-$arch.pkg.tar.xz" ]]
         then
-            #TODO write err function
-            info "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'" >&2
-            warn "installation not implemented"
+            report "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'"
+            packages+=("$packageDir/$fullname-$arch.pkg.tar.xz")
         else
             if [[ -e "$buildDir/$name" ]]
             then
-                info "Build directory '$buildDir/$name' exists, skip downloading" >&2
+                msg "Build directory '$buildDir/$name' exists, skip downloading"
             elif [[ "$no_download" != true ]] 
             then
                 download_source "$entry"
             fi
 
             cd "$buildDir/$name"
-            info "Building $entry" >&2
+            report "Building $entry"
             $MAKEPKG $makepkg_flags
         fi
 
@@ -388,7 +392,7 @@ install_package() {
 
         for package_file in $(find "$packageDir" -name "$fullname*.pkg.tar.xz")
         do
-            info "Installing $(basename $package_file)"
+            report "Installing $(basename $package_file)"
             mkdir -p "$dbDir/$name"
             cd "$dbDir/$name"
             #TODO: if $prefix changes, strip-components needs to change
@@ -424,7 +428,7 @@ upgrade_package() {
     done
     if (( "${#upgradable[@]}" == 0 ))
     then
-        info "System up to date"
+        report "System up to date"
         return 0
     fi
     read -p "Upgrade ${#upgradable[@]} package${upgradable[1]:+s}? [y,n] " choice 
@@ -434,7 +438,7 @@ upgrade_package() {
     esac
     for name in "${upgradable[@]}"
     do
-        info "Upgrade '$name'"
+        report "Upgrade '$name'"
         uninstall_package $name
         install_package $name
     done
@@ -503,7 +507,7 @@ uninstall_package() {
     done
 
     rm -rf "$dbDir/$name"
-    info "Uninstalled '$name'"
+    report "Uninstalled '$name'"
 
     hash -r
 }
