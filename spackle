@@ -64,7 +64,7 @@ report() {
     echo -en "$RESET" >&2
 }
 msg() {
-    echo -en "$LIGHTBLACK" >&2
+    echo -en "$WHITE" >&2
     echo "$@" >&2
     echo -en "$RESET" >&2
 }
@@ -84,16 +84,14 @@ err() {
 update_aur_index() {
     [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
     # Update from file list of the aur git mirror (approx 6 sec)
+    # Updated every hour
+    # Kind of a hack, but it was the best index of the entire AUR
+    # Alternative: aur3.org has a tarball of all pkgbuilds, but it is
+    # only updated nightly, is slower to download, and I don't think
+    # aur3.org properly handles special characters (like plus signs)
+    # in package names.
     report "Updating ArchLinux AUR index" 
     curl "http://pkgbuild.com/git/aur-mirror.git/plain" | grep '^  <li>' | sed -e 's/<[^>]*>//g' -e 's/^\s*/aur\//' > "$indexDir/aur_index.txt"
-
-    # Download PKGBUILDS so we have dependency info
-    (   # use a subshell so we don't affect the current directory
-        cd $indexDir
-        wget http://aur3.org/all_pkgbuilds.tar.gz
-        # uncompress for faster dependency extraction
-        gunzip -c all_pkgbuilds.tar.gz
-    )
 }
 
 update_abs_index() {
@@ -104,6 +102,7 @@ update_abs_index() {
     for repo in core extra community
     do
         # Rsync lists filenames but not version numbers
+        # Also have to get the arch=any packages too
         #rsync "rsync.archlinux.org::abs/x86_64/$repo/" | awk "{print \"$repo/\"\$5}" > "${repo}_index.txt"
 
         curl -o "$indexDir/$repo.db" "$mirror/$repo/os/$arch/$repo.db"
@@ -123,18 +122,20 @@ update_index() {
 #     find_pkg "pacman"   # core/pacman-4.0.3-1"
 #
 find_pkg() {
+    local name="$1"
+    local found=""
     for repo in core extra community
     do
         [[ -e "$indexDir/${repo}_index.txt" ]] || update_abs_index
-        grep "/$1-[^-]*-[0-9]*\$" "$indexDir/${repo}_index.txt"
+        grep "/$name-[^-]*-[0-9]*\$" "$indexDir/${repo}_index.txt"
+        [[ "$?" == "0" ]] && found="true"
     done
 
     [[ -e "$indexDir/aur_index.txt" ]] || update_aur_index
-    grep "/$1\$" "$indexDir/aur_index.txt"
-    #tar --exclude="*/*" -tf "$repo.db" | grep "^$1-[^-]*-[0-9]*/$" | sed 's@/$@@'
-    #tar --exclude="*/*" -ztf "$repo.db" | sed -n 's@^\('"$1"'-[^-]*-[0-9]*\)/$@\1@p' 
-    # Use curl to avoid saving the db file
-    #curl -sS "$db_uri" | tar --exclude="*/*" -zt | grep -m 1 "^$1-[^-]*-[0-9]*/$" | sed 's@/$@@'
+    grep "/$name\$" "$indexDir/aur_index.txt"
+    [[ "$?" == "0" ]] && found="true"
+
+    [[ "$found" == "true" ]] && return 0 || return 1
 }
 
 find_single_pkg() {
@@ -142,10 +143,20 @@ find_single_pkg() {
     find_pkg "$1" | sed '1 q'
 }
 
+urlencode() {
+    # if perl and perl's URI module is installed
+    perl -n -MURI::Escape -e 'chomp; print uri_escape($_);' 2>/dev/null ||
+    # if ruby installed
+    ruby -n -r cgi -e 'puts CGI.escape $_.strip' 2>/dev/null ||
+    # if python is installed
+    python -c "import urllib, sys; print urllib.quote(sys.stdin.readline().strip())" ||
+    warn "No urlencode tool found"
+}
+
 get_aur3_info() {
     local name="$1"
 
-    curl -Ss "http://aur3.org/rpc/$(echo $name|./urlencode)"
+    curl -Ss "http://aur3.org/rpc/$(echo "$name"|urlencode)"
 }
 
 # Prints deps (stripped of version requirements), one dep per line
@@ -154,13 +165,16 @@ get_deps_from_aur3() {
 }
 
 get_desc() {
-    local entry=$(find_single_pkg "$1")
+    local entry="$1"
+    [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
+    [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=$(dirname "$entry")
     local fullname=$(basename "$entry")
     local name=${fullname%-*-*}
     if [[ "$repo" == "aur" ]]
     then
-        curl "http://aur3.org/rpc/$name"
+        #curl "http://aur3.org/rpc/$name"
+        curl -sS --get -d "type=info" --data-urlencode "arg=$name" "http://aur.archlinux.org/rpc.php" | jshon
     else
         tar -Oxf "$indexDir/$repo.db" "$fullname/desc"
     fi
@@ -168,6 +182,8 @@ get_desc() {
 
 get_property(){
     local entry="$1"
+    [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
+    [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local property="$2"
     local repo=$(dirname "$entry")
     local fullname=$(basename "$entry")
@@ -185,7 +201,9 @@ get_property(){
 get_pkgbuild() {
     # print PKGBUILD to stdout
     #TODO: don't call find_pkg here
-    local entry=$(find_single_pkg "$1")
+    local entry="$1"
+    [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
+    [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=$(dirname "$entry")
     local fullname=$(basename "$entry")
     local name=${fullname%-*-*}
@@ -200,15 +218,6 @@ get_pkgbuild() {
         cat "$tmpDir/$name/PKGBUILD"
         rm -rf "$tmpDir/$name"
     fi
-}
-
-get_aur3_pkgbuild() {
-    # print PKGBUILD to stdout
-    local entry=$(find_single_pkg "$1")
-    local repo=$(dirname "$entry")
-    local fullname=$(basename "$entry")
-    local name=${fullname%-*-*}
-    tar -Oxf "$indexDir/all_pkgbuilds.tar" "mirror/$name/PKGBUILD"
 }
 
 get_local_version() {
@@ -249,7 +258,6 @@ get_deps() {
         mkdir -p "$tmpDir/empty"
         cd "$tmpDir/empty"
         (
-            #tar -Oxf "$indexDir/all_pkgbuilds.tar" "mirror/$name/PKGBUILD"
             curl -sS https://aur.archlinux.org/packages/${name:0:2}/$name/PKGBUILD
             function print_deps() {
                 IFS=$'\n'
@@ -372,7 +380,6 @@ install_package() {
 
     for arg in "$@" 
     do
-        #TODO: error check to make sure entry exists
         local entry=$(find_single_pkg "$arg")
         local repo=$(dirname "$entry")
         local fullname=$(basename "$entry")
@@ -637,11 +644,11 @@ case "$1" in
     install)            shift; install_package "$@" ;;
     uninstall)          shift; uninstall_package "$@" ;;
     list)               get_installed ;;
-    info|show)          shift; get_desc "$1" ;;
+    info|show)          shift; get_desc $(find_single_pkg "$1") ;;
     deps)               shift; get_deps "$1" ;;
     alldeps)            shift; get_all_deps --ignore-installed "$1" ;;
-    desc)               shift; get_desc "$1" ;;
-    pkgbuild)           shift; get_pkgbuild "$1" ;;
+    desc)               shift; get_desc $(find_single_pkg "$1") ;;
+    pkgbuild)           shift; get_pkgbuild $(find_single_pkg "$1") ;;
     aur3)               shift; get_aur3_info "$1" ;;
     upgrade)            shift; upgrade_package "$@" ;;
     *)                  echo "Unrecognized command: '$1'" >&2
