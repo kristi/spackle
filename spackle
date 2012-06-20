@@ -166,6 +166,7 @@ get_deps_from_aur3() {
 
 get_desc() {
     local entry="$1"
+    [[ -z "$entry" ]] && warn "blank package name" && return 1
     [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
     [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=$(dirname "$entry")
@@ -182,6 +183,7 @@ get_desc() {
 
 get_property(){
     local entry="$1"
+    [[ -z "$entry" ]] && warn "blank package name" && return 1
     [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
     [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local property="$2"
@@ -202,6 +204,7 @@ get_pkgbuild() {
     # print PKGBUILD to stdout
     #TODO: don't call find_pkg here
     local entry="$1"
+    [[ -z "$entry" ]] && warn "blank package name" && return 1
     [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
     [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=$(dirname "$entry")
@@ -229,6 +232,7 @@ get_local_version() {
 get_server_version() {
     # print depends list, one per line
     local entry="$1"
+    [[ -z "$entry" ]] && warn "blank package name" && return 1
     [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
     [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=${entry%/*}
@@ -246,6 +250,7 @@ get_server_version() {
 get_deps() {
     # print depends list, one per line
     local entry=$(find_single_pkg "$1")
+    [[ -z "$entry" ]] && warn "blank package name" && return 1
     [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=${entry%/*}
     local fullname=${entry#*/}
@@ -317,17 +322,21 @@ get_all_deps() {
 
 download_source() {
     local entry="$1"
+    [[ -z "$entry" ]] && warn "blank package name" && return 1
+    [[ "$entry" =~ "/" ]] || entry=$(find_single_pkg "$1")
+    [[ "${#entry}" == 0 ]] && warn "package '$1' not found" && return 1
     local repo=$(dirname "$entry")
     local fullname=$(basename "$entry")
     local name=${fullname%-*-*}
 
-    report "Downloading $entry"
+    report "Downloading $entry to '$buildDir/$name'"
     cd "$buildDir"
     rm -rf "$name"
 
     case "$repo" in
         core|extra|community)
             local arch=$(get_property "$entry" "arch")
+            local rsync_flags='-mrtv --no-motd --delete-after --no-p --no-o --no-g'
             rsync -q $rsync_flags "${abs[server]}::abs/$arch/$repo/$name" . 
             ;;
         aur)
@@ -337,25 +346,25 @@ download_source() {
     esac
 
     cd "$name"
-    # only modify PKGBUILD if we downloaded it
-    sed -i -e "s@/usr@$prefix/usr@g" PKGBUILD
-    sed -i -e "s@/etc@$prefix/etc@g" PKGBUILD
-    sed -i -e "s@/var@$prefix/var@g" PKGBUILD
+    # install into $prefix
+    sed -i -e 's|/usr|$prefix/usr|g' PKGBUILD
+    sed -i -e 's|/etc|$prefix/etc|g' PKGBUILD
+    sed -i -e 's|/var|$prefix/var|g' PKGBUILD
+    sed -i -e 's|/home|$prefix/home|g' PKGBUILD
 
-    if [[ "$name" == "pacman" ]]
-    then
-        patch_pacman_conf
-        patch_makepkg_conf
-        $MAKEPKG --nobuild --skipchecksums
-        (cd src/${fullname%-*}/src/pacman; patch_pacman_c)
-        makepkg_flags="$makepkg_flags --nodeps --skipchecksums --noextract"
-    fi
+#    if [[ "$name" == "pacman" ]]
+#    then
+#        patch_pacman_conf
+#        patch_makepkg_conf
+#        $MAKEPKG --nobuild --skipchecksums
+#        (cd src/${fullname%-*}/src/pacman; patch_pacman_c)
+#        makepkg_flags="$makepkg_flags --nodeps --skipchecksums --noextract"
+#    fi
 }
 
 install_package() {
     local no_download build_only dep_for found_source found_package
     local makepkg_flags="--nocheck"
-    local rsync_flags='-mrtv --no-motd --delete-after --no-p --no-o --no-g'
     while [[ "${1:0:1}" == "-" ]]; do
         case "$1" in
         --build-only)  local build_only=true ;;
@@ -594,6 +603,7 @@ usage() {
     echo "    --version   displays version"
     echo "    aur3        print package info from aur3.org"
     echo "    build       download and build a package"
+    echo "    download    download build files (PKGBUILD & patches)"
     echo "    find        find package_name in search index (Perl regex supported)"
     echo "    info        print package info"
     echo "    install     download, build, and install a package"
@@ -605,6 +615,7 @@ usage() {
     echo "    show        print package info"
     echo "    uninstall   remove an installed package"
     echo "    update      updates the package indices"
+    echo "    upgrade     install newer package version"
     echo ""
     echo ""
     echo "Examples:"
@@ -648,6 +659,7 @@ case "$1" in
     alldeps)            shift; get_all_deps --ignore-installed "$1" ;;
     desc)               shift; get_desc $(find_single_pkg "$1") ;;
     pkgbuild)           shift; get_pkgbuild $(find_single_pkg "$1") ;;
+    download)           shift; download_source $(find_single_pkg "$1") ;;
     aur3)               shift; get_aur3_info "$1" ;;
     upgrade)            shift; upgrade_package "$@" ;;
     *)                  echo "Unrecognized command: '$1'" >&2
