@@ -37,6 +37,7 @@ fi
 dbDir="$prefix/var/lib/spackle/db"
 indexDir="$prefix/var/lib/spackle/index"
 packageDir=$(source "$prefix/etc/makepkg.conf"; echo "$PKGDEST")
+packageDir=${packageDir:-$prefix/var/lib/spackle/pkg}
 buildDir="$prefix/var/lib/spackle/build"
 #gpgDir="$prefix/etc/spackle.d/gnupg"
 tmpDir="$prefix/tmp"
