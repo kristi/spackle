@@ -76,7 +76,8 @@ patch_makepkg_conf() {
     sed -i -e '/^LDFLAGS/  s|"$| -Wl,-rpath,$PREFIX/usr/lib"|' makepkg.conf
     # append LD_RUN_PATH
     sed -i -e '/^LDFLAGS/  a\
-        export LD_RUN_PATH="$PREFIX/usr/lib"' makepkg.conf
+export LD_RUN_PATH="$PREFIX/usr/lib"\
+export PKG_CONFIG_PATH="$PREFIX/usr/lib/pkgconfig"' makepkg.conf
     sed -i -e 's|^#MAKEFLAGS="-j2"|MAKEFLAGS="-j1"|' makepkg.conf
     #TODO prompt for packager name & email
 }
