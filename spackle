@@ -428,8 +428,7 @@ install_package() {
             report "Installing $(basename $package_file)"
             mkdir -p "$dbDir/$name"
             cd "$dbDir/$name"
-            #TODO: if $prefix changes, strip-components needs to change
-            tar -C "$prefix" --strip-components=3 --show-transformed-names --index-file="files" -xvf "$package_file"
+            tar -C "$prefix" --show-transformed-names --index-file="files" -xvf "$package_file"
             tar -Oxf "$package_file" ".PKGINFO" | parse_pkginfo > "$dbDir/$name/desc"
             [[ -n "$dep_for" ]] && echo "$dep_for" >> "$dbDir/$name/dep-for"
         done

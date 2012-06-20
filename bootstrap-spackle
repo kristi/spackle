@@ -55,6 +55,7 @@ patch_makepkg() {
     sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
     sed -i -e "s/bsdtar/tar/g" makepkg
     sed -i -e "s|^confdir=.*|confdir=$prefix/etc|" makepkg
+    sed -i -e '/^  check_package/,/Creating package/ s|^  cd "$pkgdir"|  cd "$pkgdir/$PREFIX"|' makepkg
     sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
 true
 }" makepkg
