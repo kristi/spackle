@@ -55,7 +55,7 @@ patch_makepkg() {
     sed -i -e 's/\(tar -tf "$file"\) -q/\1/' makepkg
     sed -i -e "s/bsdtar/tar/g" makepkg
     sed -i -e "s|^confdir=.*|confdir=$prefix/etc|" makepkg
-    sed -i -e '/^  check_package/,/Creating package/ s|^  cd "$pkgdir"|  cd "$pkgdir/$PREFIX"|' makepkg
+    sed -i -e '/^create_package/,/Creating package/ s|pkgdir|pkgdir$prefix|' makepkg
     sed -i -e "/warning .*Running %s as an unprivileged user/,+3 {s/^/#/;/sleep/ a\
 true
 }" makepkg
@@ -65,19 +65,19 @@ patch_makepkg_conf() {
     #sed -i -e '/^BUILDENV/ s/fakeroot/!fakeroot/' makepkg.conf
     sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' makepkg.conf
     sed -i -e "s|^#PKGDEST=/home/packages|PKGDEST=$packageDir|" makepkg.conf
-    sed -i -e '/^CFLAGS/   i PREFIX="$prefix"' makepkg.conf
-    sed -i -e '/^CFLAGS/   s|"$| -I$PREFIX/usr/include"|' makepkg.conf
-    sed -i -e '/^CXXFLAGS/   s|"$| -I$PREFIX/usr/include"|' makepkg.conf
-    sed -i -e '/^CPPFLAGS/   s|"$| -I$PREFIX/usr/include"|' makepkg.conf
+    sed -i -e "/^CFLAGS/   i prefix=\"$prefix\"" makepkg.conf
+    sed -i -e '/^CFLAGS/   s|"$| -I$prefix/usr/include"|' makepkg.conf
+    sed -i -e '/^CXXFLAGS/   s|"$| -I$prefix/usr/include"|' makepkg.conf
+    sed -i -e '/^CPPFLAGS/   s|"$| -I$prefix/usr/include"|' makepkg.conf
     # Remove "-pipe" to reduce gcc memory usage
     sed -i -e "/^CFLAGS/   s|-pipe *||" makepkg.conf
     sed -i -e "/^CXXFLAGS/ s|-pipe *||" makepkg.conf
-    sed -i -e '/^LDFLAGS/  s|"$| -L$PREFIX/usr/lib"|' makepkg.conf
-    sed -i -e '/^LDFLAGS/  s|"$| -Wl,-rpath,$PREFIX/usr/lib"|' makepkg.conf
+    sed -i -e '/^LDFLAGS/  s|"$| -L$prefix/usr/lib"|' makepkg.conf
+    sed -i -e '/^LDFLAGS/  s|"$| -Wl,-rpath,$prefix/usr/lib"|' makepkg.conf
     # append LD_RUN_PATH
     sed -i -e '/^LDFLAGS/  a\
-export LD_RUN_PATH="$PREFIX/usr/lib"\
-export PKG_CONFIG_PATH="$PREFIX/usr/lib/pkgconfig"' makepkg.conf
+export LD_RUN_PATH="$prefix/usr/lib"\
+export PKG_CONFIG_PATH="$prefix/usr/lib/pkgconfig"' makepkg.conf
     sed -i -e 's|^#MAKEFLAGS="-j2"|MAKEFLAGS="-j1"|' makepkg.conf
     #TODO prompt for packager name & email
 }
@@ -137,8 +137,9 @@ bootstrap_from_repo() {
     (cd "$prefix/usr/bin" && patch_fakeroot)
 
     # Cleanup
+    hash -r
     popd >/dev/null
-    rm -rf "$prefix/tmp"
+    #rm -rf "$prefix/tmp"
 }
 
 bootstrap_spackle() {
@@ -185,6 +186,8 @@ bootstrap_spackle() {
     then
         echo "source ~/.spackle" >> ~/.zshrc
     fi
+
+    source "$prefix/etc/spackle/spackle-pathify"
 
     report "Installing spackle dependencies"
     "$prefix/usr/bin/spackle" install jansson jshon
