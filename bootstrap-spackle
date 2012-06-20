@@ -27,7 +27,7 @@ emph() {
     echo "$@"
     echo -en "$RESET"
 }
-info() {
+report() {
     echo -en "$LIGHTWHITE"
     echo "$@"
     echo -en "$RESET"
@@ -41,8 +41,8 @@ err() {
 }
 
 patch_spackle() {
-    sed -i -e "s/@INSTALL_DATE@/$(date)/" spackle
-    sed -i -e "s/@GIT_COMMIT@/$(cd $scriptDir && git rev-parse HEAD)/" spackle
+    sed -i -e "s|@INSTALL_DATE@|$(date)|" spackle
+    sed -i -e "s|@GIT_COMMIT@|$(cd $scriptDir && git rev-parse HEAD)|" spackle
     sed -i -e "s|^prefix=.*|prefix=$prefix|" spackle 
 }
 
@@ -63,18 +63,20 @@ true
 patch_makepkg_conf() {
     #sed -i -e '/^BUILDENV/ s/fakeroot/!fakeroot/' makepkg.conf
     sed -i -e 's/x86_64-unknown-linux-gnu/x86_64-linux-gnu/' makepkg.conf
-    sed -i -e "s@^#PKGDEST=/home/packages@PKGDEST=$packageDir@" makepkg.conf
-    sed -i -e "/^CFLAGS/   s@\"\$@ -I$prefix/usr/include\"@" makepkg.conf
-    sed -i -e "/^CXXFLAGS/ s@\"\$@ -I$prefix/usr/include\"@" makepkg.conf
+    sed -i -e "s|^#PKGDEST=/home/packages|PKGDEST=$packageDir|" makepkg.conf
+    sed -i -e '/^CFLAGS/   i PREFIX="$prefix"' makepkg.conf
+    sed -i -e '/^CFLAGS/   s|"$| -I$PREFIX/usr/include"|' makepkg.conf
+    sed -i -e '/^CXXFLAGS/   s|"$| -I$PREFIX/usr/include"|' makepkg.conf
+    sed -i -e '/^CPPFLAGS/   s|"$| -I$PREFIX/usr/include"|' makepkg.conf
     # Remove "-pipe" to reduce gcc memory usage
-    sed -i -e "/^CFLAGS/   s@-pipe *@@" makepkg.conf
-    sed -i -e "/^CXXFLAGS/ s@-pipe *@@" makepkg.conf
-    sed -i -e "/^LDFLAGS/  s@\"\$@ -L$prefix/usr/lib\"@" makepkg.conf
-    sed -i -e "/^LDFLAGS/  s@\"\$@ -Wl,-rpath,$prefix/usr/lib\"@" makepkg.conf
+    sed -i -e "/^CFLAGS/   s|-pipe *||" makepkg.conf
+    sed -i -e "/^CXXFLAGS/ s|-pipe *||" makepkg.conf
+    sed -i -e '/^LDFLAGS/  s|"$| -L$PREFIX/usr/lib"|' makepkg.conf
+    sed -i -e '/^LDFLAGS/  s|"$| -Wl,-rpath,$PREFIX/usr/lib"|' makepkg.conf
     # append LD_RUN_PATH
-    sed -i -e "/^LDFLAGS/  a\
-        export LD_RUN_PATH=\"$prefix/usr/lib\"" makepkg.conf
-    sed -i -e "s@^#MAKEFLAGS=\"-j2\"@MAKEFLAGS=\"-j1\"@" makepkg.conf
+    sed -i -e '/^LDFLAGS/  a\
+        export LD_RUN_PATH="$PREFIX/usr/lib"' makepkg.conf
+    sed -i -e 's|^#MAKEFLAGS="-j2"|MAKEFLAGS="-j1"|' makepkg.conf
     #TODO prompt for packager name & email
 }
 
@@ -114,17 +116,17 @@ bootstrap_from_repo() {
     [[ -e "$repo.db" ]] || wget -nv "$mirror/$repo/os/$arch/$repo.db"
 
     # Get makepkg from pacman
-    info "Bootstrapping makepkg"
+    report "Bootstrapping makepkg"
     name="pacman"
     fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
     pkg="$fullname-$arch.pkg.tar.xz"
-    [[ -e "$pkg" ]] || wget -nv "$mirror/$repo/os/$arch/$pkg"
+    [[ -e "$pkg" ]] || wget -nv -N "$mirror/$repo/os/$arch/$pkg"
     tar -C "$prefix" -xf "$pkg" "usr/bin/makepkg" "etc/makepkg.conf"
     (cd "$prefix/etc" && patch_makepkg_conf)
     (cd "$prefix/usr/bin" && patch_makepkg)
 
     # Fakeroot
-    info "Bootstrapping fakeroot"
+    report "Bootstrapping fakeroot"
     name="fakeroot"
     fullname=$(tar -tf "$repo.db" | grep "^$name-[^-]*-[^-]*/\$" | sed -e 's|/$||')
     pkg="$fullname-$arch.pkg.tar.xz"
@@ -148,7 +150,7 @@ bootstrap_spackle() {
         shift
     done
     [[ "${prefix:0:1}" != "/" ]] && err "prefix must be an absolute path (prefix='$prefix')" 
-    info "Installing spackle to '$prefix'"
+    report "Installing spackle to '$prefix'"
     sleep 1
     mkdir -p "$prefix"
     # Set prefix to an absolute path
@@ -157,7 +159,7 @@ bootstrap_spackle() {
 
     bootstrap_from_repo
 
-    info "Installing spackle script"
+    report "Installing spackle script"
     mkdir -p "$prefix/usr/bin"
     cp "$scriptDir/spackle" "$prefix/usr/bin"
     (cd $prefix/usr/bin && patch_spackle)
@@ -168,7 +170,7 @@ bootstrap_spackle() {
     (cd "$prefix/etc/spackle" && patch_spackle_pathify)
     ln -fs "$prefix/etc/spackle/spackle-pathify" "$HOME/.spackle"
 
-    info "Installing shell hooks"
+    report "Installing shell hooks"
     if [[ -e ~/.bashrc ]] && ! grep -q "spackle" ~/.bashrc
     then
         echo "source ~/.spackle" >> ~/.bashrc
@@ -182,7 +184,7 @@ bootstrap_spackle() {
         echo "source ~/.spackle" >> ~/.zshrc
     fi
 
-    info "Installing spackle dependencies"
+    report "Installing spackle dependencies"
     "$prefix/usr/bin/spackle" install jansson jshon
     #zlib bzip2 xz openssl
     #libarchive pacman
@@ -192,7 +194,7 @@ bootstrap_spackle() {
     emph ""
     emph "Setup spackle paths in your current shell by running"
     emph ""
-    info "    source ~/.spackle"
+    report "    source ~/.spackle"
     emph ""
     emph "or logout and log back into your shell."
 }
