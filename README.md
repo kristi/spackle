@@ -5,6 +5,28 @@ A local package manager for non-root linux users.
 
 Bringing easy package compiling, dependency resolution, and uninstallation to the masses.
 
+## Quick Guide
+
+Install Spackle
+
+    git clone https://github.com/kristi/spackle.git
+    ./spackle/bootstrap-spackle
+    source ~/.spackle
+
+Use Spackle
+
+    spackle --help
+    spackle install libffi python2
+    spackle upgrade python2
+    spackle uninstall python2
+
+    spackle find python2
+    spackle findall python2
+    spackle deps python2
+    spackle pkgbuild python2
+    spackle show python2
+    spackle list
+
 ## The problem
 
 All modern package managers (like apt-get, yum, pacman, dpkg, rpm, nixos) believe that only root users should install packages.  But sometimes normal users need to install stuff too.
