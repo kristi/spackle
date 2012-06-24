@@ -413,9 +413,8 @@ install_package() {
         local fullname=$(basename "$entry")
         local name=${fullname%-*-*}
         local packages=()
-        local base=$(get_property "$entry" "base")
 
-        if [[ -e "$arg" ]]
+        if [[ -f "$arg" ]] && tar -tf "$arg" ".PKGINFO" &>/dev/null
         then
             # TODO: implement installing from pkg.tar.xz file
             # spackle install foobar.okg.tar.xz
@@ -424,7 +423,7 @@ install_package() {
         elif [[ -z "$entry" ]]
         then
             warn "No package found for '$arg'"
-            continue
+            continue  # skip installation
         elif [[ -e "$packageDir/$fullname-$arch.pkg.tar.xz" ]]
         then
             report "Package found at '$packageDir/$fullname-$arch.pkg.tar.xz'"
@@ -434,6 +433,7 @@ install_package() {
             report "Package found at '$packageDir/$fullname-any.pkg.tar.xz'"
             packages+=("$packageDir/$fullname-any.pkg.tar.xz")
         else
+            local base=$(get_property "$entry" "base")
             if [[ -e "$buildDir/${base:-$name}" ]]
             then
                 msg "Build directory '$buildDir/${base:-name}' exists, skip downloading"
@@ -444,7 +444,7 @@ install_package() {
 
             # Check for split package
             # Assume if base is defined, we have a split package
-            [[ -n "$base" ]] && makepkg_flags+=" --pkg $name"
+            [[ -n "$base" ]] && [[ "$base" != "$name" ]] && makepkg_flags+=" --pkg $name"
 
             cd "$buildDir/${base:-$name}"
             report "Building $entry"
