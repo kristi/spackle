@@ -413,6 +413,7 @@ install_package() {
         local fullname=$(basename "$entry")
         local name=${fullname%-*-*}
         local packages=()
+        local base=$(get_property "$entry" "base")
 
         if [[ -e "$arg" ]]
         then
@@ -433,9 +434,9 @@ install_package() {
             report "Package found at '$packageDir/$fullname-any.pkg.tar.xz'"
             packages+=("$packageDir/$fullname-any.pkg.tar.xz")
         else
-            if [[ -e "$buildDir/$name" ]]
+            if [[ -e "$buildDir/${base:-$name}" ]]
             then
-                msg "Build directory '$buildDir/$name' exists, skip downloading"
+                msg "Build directory '$buildDir/${base:-name}' exists, skip downloading"
             elif [[ "$no_download" != true ]] 
             then
                 download_source "$entry"
@@ -443,7 +444,6 @@ install_package() {
 
             # Check for split package
             # Assume if base is defined, we have a split package
-            local base=$(get_property "$entry" "base")
             [[ -n "$base" ]] && makepkg_flags+=" --pkg $name"
 
             cd "$buildDir/${base:-$name}"
