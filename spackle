@@ -426,7 +426,7 @@ install_package() {
             cd "$buildDir/$name"
             report "Building $entry"
             $MAKEPKG $makepkg_flags
-            packages+=( $(find "$packageDir" -name "$fullname*.pkg.tar.xz") )
+            packages+=( $(find "$packageDir" -name "$fullname*.pkg.tar.*") )
         fi
 
         [[ "$build_only" == "true" ]] && continue
