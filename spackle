@@ -217,6 +217,8 @@ get_pkgbuild() {
         curl -sS https://aur.archlinux.org/packages/${name:0:2}/$name/PKGBUILD
     else
         local arch=$(get_property "$entry" "arch")
+        local base=$(get_property "$entry" "base")
+        name="${base:-$name}"
         mkdir -p "$tmpDir/$name"
         rsync "rsync.archlinux.org::abs/$arch/$repo/$name/PKGBUILD" "$tmpDir/$name/PKGBUILD" 
         cat "$tmpDir/$name/PKGBUILD"
@@ -337,6 +339,8 @@ download_source() {
     case "$repo" in
         core|extra|community)
             local arch=$(get_property "$entry" "arch")
+            local base=$(get_property "$entry" "base")
+            name="${base:-$name}"
             local rsync_flags='-mrtv --no-motd --delete-after --no-p --no-o --no-g'
             rsync -q $rsync_flags "${abs[server]}::abs/$arch/$repo/$name" . 
             ;;
@@ -422,6 +426,11 @@ install_package() {
             then
                 download_source "$entry"
             fi
+
+            # Check for split package
+            # Assume if base is defined, we have a split package
+            local base=$(get_property "$entry" "base")
+            [[ -n "$base" ]] && makepkg_flags+=" --pkg $name"
 
             cd "$buildDir/$name"
             report "Building $entry"
