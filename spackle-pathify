@@ -123,7 +123,7 @@ export MAKEFLAGS="-j1 $MAKEFLAGS"
 _OLD_SPACKLE_PKG_CONFIG_PATH="$PKG_CONFIG_PATH"
 export PKG_CONFIG_PATH="$SPACKLE_PREFIX/usr/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 
-if [ -z "$SPACKLE_PREFIX_DISABLE_PROMPT" ] &&
+if [ -z "$SPACKLE_DISABLE_PROMPT" ] &&
    [ -z "$PATHIFY_DISABLE_PROMPT" ] ; then
     _OLD_SPACKLE_PS1="$PS1"
     # Add env name before first non-whitespace PS1 char
