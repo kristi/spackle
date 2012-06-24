@@ -368,6 +368,9 @@ download_source() {
     sed -i -e 's|/var|$prefix/var|g' PKGBUILD
     sed -i -e 's|/home|$prefix/home|g' PKGBUILD
 
+    # speed up source downloads (ftp.archlinux.org is restricted to 50kb/s)
+    sed -i -e 's|ftp://ftp.archlinux.org|http://mirrors.kernel.org/archlinux|g' PKGBUILD
+
 #    if [[ "$name" == "pacman" ]]
 #    then
 #        patch_pacman_conf
