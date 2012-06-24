@@ -351,9 +351,9 @@ download_source() {
         core|extra|community)
             local arch=$(get_property "$entry" "arch")
             local base=$(get_property "$entry" "base")
-            name="${base:-$name}"
+            base="${base:-$name}"
             local rsync_flags='-mrtv --no-motd --delete-after --no-p --no-o --no-g'
-            rsync -q $rsync_flags "${abs[server]}::abs/$arch/$repo/$name" . 
+            rsync -q $rsync_flags "${abs[server]}::abs/$arch/$repo/$base" . 
             ;;
         aur)
             curl "http://aur.archlinux.org/packages/${name:0:2}/$name/$name.tar.gz" | tar -zx
@@ -361,7 +361,7 @@ download_source() {
         *) warn "Unrecognized repo: '$repo'"
     esac
 
-    cd "$name"
+    cd "$base"
     # install into $prefix
     sed -i -e 's|/usr|$prefix/usr|g' PKGBUILD
     sed -i -e 's|/etc|$prefix/etc|g' PKGBUILD
@@ -443,7 +443,7 @@ install_package() {
             local base=$(get_property "$entry" "base")
             [[ -n "$base" ]] && makepkg_flags+=" --pkg $name"
 
-            cd "$buildDir/$name"
+            cd "$buildDir/${base:-$name}"
             report "Building $entry"
             $MAKEPKG $makepkg_flags
             packages+=( $(find "$packageDir" -name "$fullname*.pkg.tar.*") )
@@ -462,6 +462,7 @@ install_package() {
             tar -Oxf "$package_file" ".PKGINFO" | parse_pkginfo > "$dbDir/$name/desc"
             [[ -n "$dep_for" ]] && echo "$dep_for" >> "$dbDir/$name/dep-for"
         done
+        (( ${#packages[@]} == 0 )) && err "no packages to install"
     done
 
     # Re-index
