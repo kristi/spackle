@@ -123,17 +123,28 @@ update_index() {
 #     find_pkg "pacman"   # core/pacman-4.0.3-1"
 #
 find_pkg() {
-    local name="$1"
+    while [[ "${1:0:1}" == "-" ]]; do
+        case "$1" in
+        -p|--partial)  local partial_match=true ;;
+        *) warn "Skipping unrecognized option '$1'" ;;
+        esac
+        shift
+    done
+    local query="$1"
     local found=""
+    if [[ "$partial_match" == "true" ]]
+    then
+        query=".*$query.*"
+    fi
     for repo in core extra community
     do
         [[ -e "$indexDir/${repo}_index.txt" ]] || update_abs_index
-        grep "/$name-[^-]*-[0-9]*\$" "$indexDir/${repo}_index.txt"
+        grep "/$query-[^-]*-[0-9]*\$" "$indexDir/${repo}_index.txt"
         [[ "$?" == "0" ]] && found="true"
     done
 
     [[ -e "$indexDir/aur_index.txt" ]] || update_aur_index
-    grep "/$name\$" "$indexDir/aur_index.txt"
+    grep "/$query\$" "$indexDir/aur_index.txt"
     [[ "$?" == "0" ]] && found="true"
 
     [[ "$found" == "true" ]] && return 0 || return 1
@@ -615,6 +626,8 @@ usage() {
     echo "    build       download and build a package"
     echo "    download    download build files (PKGBUILD & patches)"
     echo "    find        find package_name in search index (Perl regex supported)"
+    echo "    find --partial  allow partial name matches"
+    echo "    findall     allow partial name matches"
     echo "    info        print package info"
     echo "    install     download, build, and install a package"
     echo "    install --no-download   build and install"
@@ -658,7 +671,8 @@ print_version() {
 case "$1" in
     -h|help|--help)     usage ;;
     --version|version)  print_version ;;
-    find|search)        shift; find_pkg "$1" ;;
+    findall)            shift; find_pkg --partial "$@" ;;
+    find|search)        shift; find_pkg "$@" ;;
     update)             update_index ;;
     build)              shift; build_package "$@" ;;
     install)            shift; install_package "$@" ;;
