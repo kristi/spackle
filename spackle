@@ -81,6 +81,10 @@ err() {
     exit 1
 }
 
+abspath() {
+    echo "$(cd $(dirname "$1"); pwd -P)/$(basename "$1")"
+}
+
 
 update_aur_index() {
     [[ -e "$indexDir" ]] || mkdir -p "$indexDir"
@@ -384,6 +388,7 @@ download_source() {
 install_package() {
     local no_download build_only dep_for found_source found_package
     local makepkg_flags="--nocheck"
+    local currentDir="$PWD"
     while [[ "${1:0:1}" == "-" ]]; do
         case "$1" in
         --build-only)  local build_only=true ;;
@@ -450,6 +455,7 @@ install_package() {
             report "Building $entry"
             $MAKEPKG $makepkg_flags
             packages+=( $(find "$packageDir" -name "$fullname*.pkg.tar.*") )
+            cd "$currentDir"
         fi
 
         [[ "$build_only" == "true" ]] && continue
@@ -460,8 +466,8 @@ install_package() {
         do
             report "Installing $(basename $package_file)"
             mkdir -p "$dbDir/$name"
-            cd "$dbDir/$name"
-            tar -C "$prefix" --show-transformed-names --index-file="files" -xvf "$package_file"
+            tar --exclude=".*" -tf "$package_file" > "$dbDir/$name/files"
+            tar --exclude=".*" -C "$prefix" -xf "$package_file"
             tar -Oxf "$package_file" ".PKGINFO" | parse_pkginfo > "$dbDir/$name/desc"
             [[ -n "$dep_for" ]] && echo "$dep_for" >> "$dbDir/$name/dep-for"
         done
